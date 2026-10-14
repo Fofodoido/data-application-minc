@@ -2931,7 +2931,7 @@ websockets==16.1.1
     #   -r w/lock.in
     #   google-genai
     #   uvicorn
-werkzeug==3.1.8
+werkzeug==3.1.9
     # via
     #   -r w/lock.in
     #   apache-airflow-providers-fab
