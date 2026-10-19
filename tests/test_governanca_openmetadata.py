@@ -498,3 +498,45 @@ def test_descricao_confirmada_nao_conta_como_nao_verificada() -> None:
     dominios = _yaml("dominios.yml")
     assert not nao_verificada(dominios, "Provedor de autenticação verificado pelo login.")
     assert not nao_verificada(dominios, None)
+
+
+def test_rotulo_da_coluna_leva_o_tipo_e_preserva_o_escrito_a_mao() -> None:
+    from openmetadata.governanca.governanca import operacoes_de_rotulos
+
+    dominios = _yaml("dominios.yml")
+    tabela = {
+        "columns": [
+            {"name": "valor", "dataType": "NUMERIC", "dataTypeDisplay": "numeric"},
+            {"name": "id", "dataTypeDisplay": "text", "displayName": "id · text"},
+            {"name": "uf", "dataTypeDisplay": "char(2)", "displayName": "uf · text"},
+            {"name": "nome", "dataTypeDisplay": "text", "displayName": "Nome do agente"},
+            {"name": "data", "dataTypeDisplay": "date", "displayName": "data"},
+        ]
+    }
+    ops = {o["path"]: o["value"] for o in operacoes_de_rotulos(dominios, tabela)}
+    assert ops == {
+        "/columns/0/displayName": "valor · numeric",
+        "/columns/2/displayName": "uf · char(2)",
+        "/columns/4/displayName": "data · date",
+    }
+
+
+def test_rotulo_vai_pela_sessao_do_bot_de_rotulos() -> None:
+    """O `ingestion-bot` é recusado em `displayName`: o patch não pode ir por ele."""
+    principal, rotulos = _Sessao([]), _Sessao([_Resposta(200)])
+    om = ClienteOM(
+        "https://om",
+        "t",
+        confirmar=True,
+        sessao=principal,
+        token_de_rotulos="r",
+        sessao_de_rotulos=rotulos,
+    )
+    ops = [{"op": "add", "path": "/columns/0/displayName", "value": "a · text"}]
+    assert om.patch_de_rotulos("tables", "1", ops, "x")
+    assert principal.chamadas == [] and len(rotulos.chamadas) == 1
+    assert rotulos.headers["Authorization"] == "Bearer r"
+
+    sem_bot = ClienteOM("https://om", "t", confirmar=True, sessao=_Sessao([]))
+    assert sem_bot.patch_de_rotulos("tables", "1", ops, "x")
+    assert sem_bot.sessao.chamadas == [] and sem_bot.atualizados == 0

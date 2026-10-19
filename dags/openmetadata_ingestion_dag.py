@@ -142,7 +142,11 @@ def openmetadata_ingestion_dag() -> None:
                 "Declaracao de governanca inconsistente:\n" + "\n".join(cat.erros)
             )
         om = ClienteOM(
-            Variable.get("OM_HOST"), Variable.get("INGESTION_TOKEN"), confirmar=True
+            Variable.get("OM_HOST"),
+            Variable.get("INGESTION_TOKEN"),
+            confirmar=True,
+            # opcional: sem ele, o rótulo das colunas com o tipo fica de fora
+            token_de_rotulos=Variable.get(config.VAR_TOKEN_DE_ROTULOS, default=None),
         )
         _, termos = load_glossary(str(config.GLOSSARIO))
         governanca.sincronizar(om, cat, termos)

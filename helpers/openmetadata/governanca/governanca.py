@@ -682,6 +682,38 @@ def restricoes_desejadas(
     return desejadas
 
 
+def operacoes_de_rotulos(dominios: dict, tabela: dict) -> list[dict]:
+    """Rótulo de cada coluna com o tipo do banco, para a linhagem mostrá-lo.
+
+    O nó de linhagem do OpenMetadata exibe da coluna só o rótulo, um ícone do
+    tipo e o `constraint`; o tipo escrito só aparece se estiver no rótulo. O
+    tipo sai da própria coluna no catálogo (`dataTypeDisplay`), que é o que o
+    banco declara — não do YAML.
+
+    Rótulo que não segue o formato foi escrito por alguém na tela: fica.
+    """
+    formato = (dominios.get("rotulo_de_coluna") or {}).get("formato")
+    if not formato:
+        return []
+    operacoes = []
+    for indice, coluna in enumerate(tabela.get("columns") or []):
+        nome = coluna["name"]
+        tipo = str(coluna.get("dataTypeDisplay") or coluna.get("dataType") or "")
+        if not tipo:
+            continue
+        desejado = formato.format(nome=nome, tipo=tipo.lower())
+        atual = coluna.get("displayName")
+        prefixo = formato.split("{tipo}")[0].format(nome=nome)
+        if atual == desejado or (
+            atual and atual != nome and not atual.startswith(prefixo)
+        ):
+            continue
+        operacoes.append(
+            {"op": "add", "path": f"/columns/{indice}/displayName", "value": desejado}
+        )
+    return operacoes
+
+
 def operacoes_de_colunas(
     ativo: Ativo, tabela: dict, glossario_nosso: set[str], dominios: dict
 ) -> list[dict]:
@@ -724,6 +756,8 @@ def catalogar_ativos(
     Domínio num patch, depois o resto.
     """
     log.info("Tabelas e colunas")
+    if not om.offline and om.sessao_de_rotulos is None:
+        log.info("  rótulo das colunas com o tipo: desligado (sem OM_GOVERNANCA_TOKEN)")
     dominios = cat.governanca["dominios"]
     glossario_nosso = vocabulario_por_regra(cat.governanca["termos_minc"])
     leitores: dict[str, list[str]] = defaultdict(list)
@@ -838,6 +872,12 @@ def catalogar_tabela(
         ativo, tabela, glossario_nosso, cat.governanca["dominios"]
     )
     om.patch("tables", tabela["id"], operacoes, rotulo)
+    om.patch_de_rotulos(
+        "tables",
+        tabela["id"],
+        operacoes_de_rotulos(cat.governanca["dominios"], tabela),
+        f"rótulos de {rotulo}",
+    )
     aplicar_certificacao(om, tabela, ativo.certificacao, rotulo)
 
 

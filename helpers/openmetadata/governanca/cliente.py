@@ -49,6 +49,8 @@ class ClienteOM:
         token: str | None,
         confirmar: bool = False,
         sessao: requests.Session | None = None,
+        token_de_rotulos: str | None = None,
+        sessao_de_rotulos: requests.Session | None = None,
     ) -> None:
         self.offline = not (url and token)
         self.confirmar = confirmar and not self.offline
@@ -57,6 +59,17 @@ class ClienteOM:
         if token:
             self.sessao.headers.update(
                 {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+            )
+        #: Sessão do bot que só edita `displayName` (o `ingestion-bot` não
+        #: pode). Sem ela, o rótulo das colunas fica de fora e o resto segue.
+        self.sessao_de_rotulos: requests.Session | None = None
+        if token_de_rotulos and not self.offline:
+            self.sessao_de_rotulos = sessao_de_rotulos or requests.Session()
+            self.sessao_de_rotulos.headers.update(
+                {
+                    "Authorization": f"Bearer {token_de_rotulos}",
+                    "Content-Type": "application/json",
+                }
             )
         self.criados = 0
         self.atualizados = 0
@@ -81,17 +94,24 @@ class ClienteOM:
             log.info("MODO SIMULAÇÃO — nada é escrito. Use --confirmar para aplicar.")
 
     # ── transporte ───────────────────────────────────────────────────────
-    def _requisitar(self, metodo: str, rota: str, **kwargs: Any) -> requests.Response:
+    def _requisitar(
+        self,
+        metodo: str,
+        rota: str,
+        sessao: requests.Session | None = None,
+        **kwargs: Any,
+    ) -> requests.Response:
         """Uma chamada com retry em erro de servidor e de rede.
 
         4xx não é repetido: é recusa, e repetir só multiplica a recusa.
         """
+        sessao = sessao or self.sessao
         kwargs.setdefault("timeout", 90)
         url = f"{self.base}/{rota.lstrip('/')}"
         ultimo: Exception | None = None
         for tentativa in range(1, TENTATIVAS + 1):
             try:
-                resposta = self.sessao.request(metodo, url, **kwargs)
+                resposta = sessao.request(metodo, url, **kwargs)
             except (requests.ConnectionError, requests.Timeout) as exc:
                 ultimo = exc
             else:
@@ -187,7 +207,28 @@ class ClienteOM:
                 ok = self._patch(rota, ident, lote, rotulo + sufixo) and ok
         return ok
 
-    def _patch(self, rota: str, ident: str, operacoes: list[dict], rotulo: str) -> bool:
+    def patch_de_rotulos(
+        self, rota: str, ident: str, operacoes: list[dict], rotulo: str
+    ) -> bool:
+        """`displayName` de coluna, pela sessão do bot que pode escrevê-lo.
+
+        Sem essa sessão não há o que fazer: o `ingestion-bot` seria recusado.
+        """
+        if self.sessao_de_rotulos is None:
+            return True
+        if not operacoes:
+            self.conformes += 1
+            return True
+        return self._patch(rota, ident, operacoes, rotulo, self.sessao_de_rotulos)
+
+    def _patch(
+        self,
+        rota: str,
+        ident: str,
+        operacoes: list[dict],
+        rotulo: str,
+        sessao: requests.Session | None = None,
+    ) -> bool:
         if not self.confirmar:
             campos = ", ".join(sorted({o["path"].strip("/") for o in operacoes}))
             self._registrar(f"ajustaria {rotulo}: {campos}")
@@ -197,6 +238,7 @@ class ClienteOM:
             "PATCH",
             f"{rota}/{ident}",
             f"ajustar {rotulo}",
+            sessao=sessao,
             headers={"Content-Type": "application/json-patch+json"},
             json=operacoes,
         )

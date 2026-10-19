@@ -49,6 +49,9 @@ def servico_de_pipeline() -> str:
 class Acesso:
     url: str | None
     token: str | None
+    #: Token do bot que só edita `displayName` de tabela do MinC. Separado do
+    #: `ingestion-bot`, cuja política compartilhada nega essa operação.
+    token_de_rotulos: str | None = None
 
 
 #: Nomes aceitos para URL e token, na ordem de preferência. O primeiro par é o
@@ -56,6 +59,7 @@ class Acesso:
 #: o que o `.env` local usa.
 VARS_URL = ("OM_HOST", "OPENMETADATA_URL")
 VARS_TOKEN = ("INGESTION_TOKEN", "OM_INGESTION_TOKEN", "OPENMETADATA_JWT_TOKEN")
+VAR_TOKEN_DE_ROTULOS = "OM_GOVERNANCA_TOKEN"
 
 
 def carregar_env(arquivo: Path | None = None) -> None:
@@ -76,7 +80,11 @@ def acesso() -> Acesso:
     carregar_env()
     url = next((os.environ[n] for n in VARS_URL if os.environ.get(n)), None)
     token = next((os.environ[n] for n in VARS_TOKEN if os.environ.get(n)), None)
-    return Acesso(url=url, token=token)
+    return Acesso(
+        url=url,
+        token=token,
+        token_de_rotulos=os.environ.get(VAR_TOKEN_DE_ROTULOS) or None,
+    )
 
 
 def api_base(url: str) -> str:

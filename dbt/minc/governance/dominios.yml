@@ -382,6 +382,18 @@ classificacoes:
           A tabela tem ao menos uma coluna com descrição não verificada. As
           colunas em questão levam a etiqueta DocumentacaoMinC.NaoVerificada.
 
+#: Rótulo (`displayName`) de cada coluna com o tipo do banco: `valor · numeric`.
+#: O nó de linhagem do OpenMetadata mostra da coluna só o rótulo, um ícone do
+#: tipo e o `constraint` ("NULL" em toda coluna que aceita nulo); sem isto, o
+#: tipo não aparece escrito na linhagem. O tipo vem da coluna no catálogo, não
+#: daqui. Rótulo escrito à mão na tela, fora deste formato, é preservado.
+#:
+#: Escrito pelo `minc-governanca-bot` (token em `OM_GOVERNANCA_TOKEN`): a
+#: política compartilhada dos bots nega `displayName` ao `ingestion-bot`. Sem o
+#: token, esta regra fica desligada e o resto da governança segue igual.
+rotulo_de_coluna:
+  formato: '{nome} · {tipo}'
+
 #: Quando uma descrição conta como não verificada. O padrão é procurado na
 #: descrição do `schema.yml`/`sources.yml`, sem diferenciar maiúsculas. São
 #: as duas formas da marca no projeto: `[NÃO VERIFICADO]` (e `[Inferido, não

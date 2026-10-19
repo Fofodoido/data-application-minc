@@ -43,6 +43,11 @@ def preparar(descricao: str) -> tuple[ClienteOM, Catalogo] | None:
             print(f"  - {erro}")
         return None
     acesso = config.acesso()
-    om = ClienteOM(acesso.url, acesso.token, confirmar=args.confirmar)
+    om = ClienteOM(
+        acesso.url,
+        acesso.token,
+        confirmar=args.confirmar,
+        token_de_rotulos=acesso.token_de_rotulos,
+    )
     om.cabecalho()
     return om, cat

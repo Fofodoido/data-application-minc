@@ -73,7 +73,8 @@ Depois, quatro ajustes:
    recipes, senão a linhagem aponta para tabelas que não existem no catálogo.
 3. **`recipes/*.yaml`** — `serviceName` e o `schemaFilterPattern`.
 4. **Variables do Airflow** — `OM_HOST`, `INGESTION_TOKEN`, `PROFILER_TOKEN`,
-   `CLASSIFICATION_TOKEN`. Não são variáveis de ambiente de propósito: são
+   `CLASSIFICATION_TOKEN` e, opcional, `OM_GOVERNANCA_TOKEN` (ver
+   "O tipo na linhagem"). Não são variáveis de ambiente de propósito: são
    segredo, e ficam criptografadas no banco de metadados.
 
 As flags `OM_INGEST_*` são variáveis de **ambiente**, não Variables, porque a
@@ -196,6 +197,27 @@ dentro dela seria executado pelo OpenMetadata, que não sabe rodá-lo.
 
 **Linhagem de coluna** vem do conector dbt, que lê o SQL compilado. Não há um
 segundo writer de linhagem: a auditoria mede a cobertura.
+
+**O tipo na linhagem precisa de um segundo bot.** O nó de linhagem do 1.13
+mostra da coluna só o rótulo, um ícone do tipo e o `constraint` — "NULL" em
+toda coluna que aceita nulo, o que parece tipo nulo e não é. Para o tipo
+aparecer escrito, a governança grava o rótulo `valor · numeric`
+(`rotulo_de_coluna` em `dominios.yml`). O `ingestion-bot` não pode: a
+`DefaultBotPolicy`, compartilhada com os outros órgãos, nega `EditDisplayName`
+a todo bot, e negação vence permissão. Por isso existe o `minc-governanca-bot`,
+configurado à mão por um administrador:
+
+| Onde | O quê |
+|---|---|
+| política `MinCGovernancaNomesPolicy` | uma regra: `Allow` `EditDisplayName` em `Table`, condição `matchAnyTag('dbtTags.minc')` |
+| papel `MinCGovernancaNomesRole` | só a política acima |
+| bot `minc-governanca-bot` | só o papel acima — **sem o `DefaultBotRole`**, que o OpenMetadata põe sozinho em bot novo e traz a `DisplayName-Deny` |
+
+O token dele vai em `OM_GOVERNANCA_TOKEN`: no `.env` local e como Variable do
+Airflow. Sem o token, o rótulo fica desligado e o resto da governança segue.
+Para conferir a permissão: `GET /api/v1/permissions/table/name/<fqn>` com o
+token do bot deve dar `EditDisplayName: allow` numa tabela do MinC e
+`notAllow` numa de outro órgão.
 
 ## Não conectado
 
