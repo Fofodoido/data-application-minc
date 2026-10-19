@@ -1832,9 +1832,14 @@ na DAG desta branch, que ainda não foi implantada.
 **Armadilha confirmada: a DAG da `main` desfaz parte disto a cada execução.**
 Às 00:00 o `sync_glossary` da `main` regravou o glossário e as relações
 tipadas voltaram a `relatedTo`; às 02:41 uma ingestão dbt apagou a
-certificação de 134 tabelas que a governança já tinha certificado. Nada se
-perde (a governança refaz), mas só para de acontecer com esta branch
-implantada, porque é a DAG dela que roda a governança por último.
+certificação de 134 tabelas que a governança já tinha certificado; entre 03:45
+e 04:17 outra apagou 450. A ingestão de fora roda várias vezes por noite, não
+só à meia-noite. Nada se perde (a governança refaz), mas só para de acontecer
+com esta branch implantada, porque é a DAG dela que roda a governança por
+último.
+
+**Etiqueta de documentação não verificada, aplicada:** 594 tabelas e 7.818
+colunas com `DocumentacaoMinC.NaoVerificada`.
 
 **Pendente.**
 - merge e implantação da branch (sem isso, a reversão acima se repete);
