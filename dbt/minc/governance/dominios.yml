@@ -358,6 +358,37 @@ classificacoes:
       um formato só. Cada formato que declara um padrão é conferido por um
       teste do OpenMetadata.
 
+  #: Documentação que ninguém confirmou numa fonte de verdade. O projeto dbt
+  #: escreve `[NÃO VERIFICADO]` (ou `[Inferido, não verificado]`) na descrição
+  #: em vez de inventar um significado que pareça oficial; a etiqueta torna
+  #: essa marca filtrável e contável no catálogo. Aplicada pela regra de
+  #: `documentacao_nao_verificada`, logo abaixo: some sozinha quando a
+  #: descrição for confirmada e a marca sair do YAML.
+  - name: DocumentacaoMinC
+    display_name: Documentação (MinC)
+    mutuamente_exclusivas: false
+    description: >
+      Estado de verificação da documentação do ativo no Ministério da Cultura.
+    etiquetas:
+      - name: NaoVerificada
+        display_name: Não verificada
+        description: >
+          A descrição desta tabela ou coluna foi inferida (do nome, do código
+          ou do pipeline) e não foi confirmada em dicionário de dados ou
+          documentação da origem. Confirme antes de citar o significado.
+      - name: ColunasNaoVerificadas
+        display_name: Colunas não verificadas
+        description: >
+          A tabela tem ao menos uma coluna com descrição não verificada. As
+          colunas em questão levam a etiqueta DocumentacaoMinC.NaoVerificada.
+
+#: Quando uma descrição conta como não verificada. O padrão é procurado na
+#: descrição do `schema.yml`/`sources.yml`, sem diferenciar maiúsculas.
+documentacao_nao_verificada:
+  padrao: 'n[ãa]o verificad[oa]s?'
+  etiqueta: DocumentacaoMinC.NaoVerificada
+  etiqueta_de_colunas: DocumentacaoMinC.ColunasNaoVerificadas
+
 #: Nativas do OpenMetadata, conferidas e nunca alteradas.
 classificacoes_nativas:
   - Tier

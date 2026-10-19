@@ -132,6 +132,11 @@ def auditar_ativos(
                 certificacao == ativo.certificacao or not ativo.certificacao,
             )
             colunas = tabela.get("columns") or []
+            if _tem(tabela, "DocumentacaoMinC.NaoVerificada"):
+                rel.totais["tabelas com descrição não verificada"] += 1
+            rel.totais["colunas com descrição não verificada"] += sum(
+                _tem(c, "DocumentacaoMinC.NaoVerificada") for c in colunas
+            )
             if colunas:
                 descritas = sum(bool(c.get("description")) for c in colunas)
                 rel.conferir(produto, "colunas_descritas", descritas == len(colunas))

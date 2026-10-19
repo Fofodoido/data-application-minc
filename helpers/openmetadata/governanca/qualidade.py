@@ -286,6 +286,7 @@ def sincronizar_contratos(
                 om._registrar(f"contrataria {fqn}")
             continue
         casos = casos_da_tabela(om, fqn)
+        uso = texto(termos_de_uso.get(ativo.produto or ""))
         desejado: dict[str, Any] = {
             "description": texto(ativo.descricao),
             "schema": [
@@ -293,7 +294,10 @@ def sincronizar_contratos(
                 for c in tabela.get("columns") or []
             ],
             "qualityExpectations": [referencia(c, "testCase") for c in casos],
-            "termsOfUse": texto(termos_de_uso.get(ativo.produto or "")) or None,
+            # A instância guarda os termos como objeto `{content}`. Texto puro é
+            # aceito e convertido, mas a comparação nunca bateria e o contrato
+            # seria reescrito a cada execução.
+            "termsOfUse": {"content": uso} if uso else None,
             "owners": donos.resolver(padrao.get("owner_key")),
         }
         nome = f"minc_contrato_{ativo.nome}"

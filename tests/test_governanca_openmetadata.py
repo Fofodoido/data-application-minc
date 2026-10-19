@@ -32,7 +32,9 @@ from openmetadata.governanca.catalogo import (
 )
 from openmetadata.governanca.cliente import ClienteOM, equivalente, etiqueta
 from openmetadata.governanca.governanca import (
+    etiquetas_do_ativo,
     mesclar_etiquetas,
+    operacoes_de_colunas,
     operacoes_de_extensao,
 )
 
@@ -407,3 +409,47 @@ def test_evidencia_semantica_existente_nao_e_sobrescrita() -> None:
     assert vazio == [
         {"op": "add", "path": "/extension/mincTableGrain", "value": "do dbt"}
     ]
+
+
+def test_termos_de_uso_do_contrato_convergem() -> None:
+    """A instância devolve os termos como `{content}`: texto puro nunca casaria
+    e o contrato seria reescrito a cada execução."""
+    from openmetadata.governanca.qualidade import _diferenca_do_contrato
+
+    atual = {"termsOfUse": {"content": "uso restrito", "inherited": False}}
+    objeto = {"schema": [], "termsOfUse": {"content": "uso restrito"}}
+    assert _diferenca_do_contrato(atual, objeto) == []
+    assert _diferenca_do_contrato(atual, {"schema": [], "termsOfUse": "uso restrito"})
+
+
+def test_descricao_nao_verificada_vira_etiqueta(cat: catalogo.Catalogo) -> None:
+    """A marca `[NÃO VERIFICADO]` do YAML chega ao catálogo como etiqueta
+    filtrável: na coluna marcada, e na tabela como "tem coluna marcada"."""
+    dominios = cat.governanca["dominios"]
+    ativo = next(a for a in cat.ativos.values() if a.nome == "silver_usr")
+    marcada = next(c for c in ativo.colunas if "não verificado" in c.descricao.lower())
+    assert "DocumentacaoMinC.ColunasNaoVerificadas" in {
+        t["tagFQN"] for t in etiquetas_do_ativo(dominios, ativo)
+    }
+    tabela = {"columns": [{"name": c.nome, "tags": []} for c in ativo.colunas]}
+    marcadas = {
+        tabela["columns"][int(op["path"].split("/")[2])]["name"]
+        for op in operacoes_de_colunas(ativo, tabela, set(), dominios)
+        if "DocumentacaoMinC.NaoVerificada" in {t["tagFQN"] for t in op["value"]}
+    }
+    assert marcadas == {marcada.nome}
+
+
+def test_etiqueta_nao_verificada_sai_quando_a_descricao_e_confirmada(
+    cat: catalogo.Catalogo,
+) -> None:
+    dominios = cat.governanca["dominios"]
+    ativo = next(a for a in cat.ativos.values() if a.camada == "gold" and a.colunas)
+    coluna = ativo.colunas[0]
+    tabela = {
+        "columns": [
+            {"name": coluna.nome, "tags": [etiqueta("DocumentacaoMinC.NaoVerificada")]}
+        ]
+    }
+    (op,) = operacoes_de_colunas(ativo, tabela, set(), dominios)
+    assert "DocumentacaoMinC.NaoVerificada" not in {t["tagFQN"] for t in op["value"]}

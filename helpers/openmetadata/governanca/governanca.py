@@ -23,6 +23,7 @@ preservada; termo de glossário pendurado à mão também.
 from __future__ import annotations
 
 import logging
+import re
 from collections import defaultdict
 from typing import Any
 
@@ -42,8 +43,10 @@ log = logging.getLogger(__name__)
 
 #: Classificações cujo conteúdo numa tabela é inteiramente nosso: as etiquetas
 #: delas são SUBSTITUÍDAS pelo declarado. As de qualquer outra são preservadas.
-CLASSIFICACOES_DA_TABELA = {"Uso", "Tier"}
 CLASSIFICACAO_DE_FORMATO = "FormatoMinC"
+CLASSIFICACAO_DE_DOCUMENTACAO = "DocumentacaoMinC"
+CLASSIFICACOES_DA_TABELA = {"Uso", "Tier", CLASSIFICACAO_DE_DOCUMENTACAO}
+CLASSIFICACOES_DA_COLUNA = {CLASSIFICACAO_DE_FORMATO, CLASSIFICACAO_DE_DOCUMENTACAO}
 
 #: Camadas que recebem a vizinhança semântica. Bronze e raw ficam de fora: são
 #: cópia da origem, e o que se publica delas é a topologia, não o significado.
@@ -471,7 +474,32 @@ def etiquetas_do_ativo(dominios: dict, ativo: Ativo) -> list[dict]:
         fqns.append(ativo.tier)
     if ativo.uso:
         fqns.append(ativo.uso)
+    fqns += marcas_de_verificacao(dominios, ativo)
     return [etiqueta(f) for f in fqns] + [etiqueta(t, "Glossary") for t in ativo.termos]
+
+
+def nao_verificada(dominios: dict, descricao: str | None) -> bool:
+    """A descrição carrega a marca de documentação não confirmada."""
+    padrao = (dominios.get("documentacao_nao_verificada") or {}).get("padrao")
+    return bool(padrao and re.search(padrao, descricao or "", re.IGNORECASE))
+
+
+def marcas_de_verificacao(dominios: dict, ativo: Ativo) -> list[str]:
+    """Etiquetas de documentação não verificada da tabela.
+
+    Duas perguntas diferentes: a descrição DA TABELA é confiável? e alguma
+    COLUNA dela não é? A segunda é a que interessa a quem vai consumir uma
+    silver de descrição limpa com uma coluna de significado ainda inferido.
+    """
+    regra = dominios.get("documentacao_nao_verificada") or {}
+    marcas = []
+    if regra.get("etiqueta") and nao_verificada(dominios, ativo.descricao):
+        marcas.append(regra["etiqueta"])
+    if regra.get("etiqueta_de_colunas") and any(
+        nao_verificada(dominios, c.descricao) for c in ativo.colunas
+    ):
+        marcas.append(regra["etiqueta_de_colunas"])
+    return marcas
 
 
 def vocabulario_por_regra(termos: dict) -> set[str]:
@@ -652,14 +680,15 @@ def restricoes_desejadas(
 
 
 def operacoes_de_colunas(
-    ativo: Ativo, tabela: dict, glossario_nosso: set[str]
+    ativo: Ativo, tabela: dict, glossario_nosso: set[str], dominios: dict
 ) -> list[dict]:
-    """Formato e termos de glossário em cada coluna.
+    """Formato, verificação da descrição e termos de glossário em cada coluna.
 
     O índice sai da resposta da API (`/columns/<i>/tags`), nunca de uma ordem
     presumida: a ordem do catálogo é a do banco, não a do YAML.
     """
     declaradas = {c.nome: c for c in ativo.colunas}
+    marca = (dominios.get("documentacao_nao_verificada") or {}).get("etiqueta")
     operacoes = []
     for indice, coluna in enumerate(tabela.get("columns") or []):
         decl = declaradas.get(coluna["name"])
@@ -668,9 +697,11 @@ def operacoes_de_colunas(
         marcas = []
         if decl.formato:
             marcas.append(etiqueta(f"{CLASSIFICACAO_DE_FORMATO}.{decl.formato}"))
+        if marca and nao_verificada(dominios, decl.descricao):
+            marcas.append(etiqueta(marca))
         marcas += [etiqueta(t, "Glossary") for t in decl.termos]
         desejadas = mesclar_etiquetas(
-            coluna.get("tags") or [], marcas, glossario_nosso, {CLASSIFICACAO_DE_FORMATO}
+            coluna.get("tags") or [], marcas, glossario_nosso, CLASSIFICACOES_DA_COLUNA
         )
         if not equivalente(coluna.get("tags") or [], desejadas):
             operacoes.append(
@@ -800,7 +831,9 @@ def catalogar_tabela(
     restricoes = restricoes_desejadas(ativo, cat, tabela, servico, banco)
     if restricoes is not None:
         operacoes.append({"op": "add", "path": "/tableConstraints", "value": restricoes})
-    operacoes += operacoes_de_colunas(ativo, tabela, glossario_nosso)
+    operacoes += operacoes_de_colunas(
+        ativo, tabela, glossario_nosso, cat.governanca["dominios"]
+    )
     om.patch("tables", tabela["id"], operacoes, rotulo)
     aplicar_certificacao(om, tabela, ativo.certificacao, rotulo)
 
