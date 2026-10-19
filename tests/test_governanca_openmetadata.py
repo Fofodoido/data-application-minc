@@ -387,3 +387,23 @@ def test_dbt_test_exclui_a_bronze_do_salic_por_padrao(
     assert "path:models/salic_dbt/bronze" in args
     monkeypatch.setenv("OM_DBT_RUN_TESTS", "false")
     assert _dbt_test_args() is None
+
+
+def test_termo_do_dbt_na_tabela_nao_e_removido(cat: catalogo.Catalogo) -> None:
+    """O conector pendura `meta.openmetadata.glossary`; o sync não pode tirar."""
+    ativo = cat.por_nome()["eventos_fomento_rouanet"]
+    assert "MinC.Politicas.Rouanet" in ativo.termos
+
+
+def test_evidencia_semantica_existente_nao_e_sobrescrita() -> None:
+    """A cardinalidade medida via Trino não tem fonte no repositório para ser
+    refeita: o sync preenche onde está vazio, e só."""
+    atual = {"mincTableGrain": "medido via Trino", "mincCamada": "bronze"}
+    ops = operacoes_de_extensao(
+        atual, {"mincTableGrain": "do dbt", "mincCamada": "silver"}
+    )
+    assert ops == [{"op": "add", "path": "/extension/mincCamada", "value": "silver"}]
+    vazio = operacoes_de_extensao({"outra": 1}, {"mincTableGrain": "do dbt"})
+    assert vazio == [
+        {"op": "add", "path": "/extension/mincTableGrain", "value": "do dbt"}
+    ]

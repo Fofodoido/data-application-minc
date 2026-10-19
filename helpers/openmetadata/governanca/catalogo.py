@@ -425,7 +425,12 @@ def montar(manifest: dict, governanca: dict[str, dict] | None = None) -> Catalog
             materializacao=(no.get("config") or {}).get("materialized"),
             colunas=colunas,
             depends_on=list((no.get("depends_on") or {}).get("nodes") or []),
-            termos=sorted(set(por_ativo.get(no["name"], []))),
+            # O termo que o `meta.openmetadata.glossary` do modelo pendura entra no
+            # desejado: fora dele, o sync o tiraria e o conector o devolveria na
+            # execução seguinte, alternando para sempre.
+            termos=sorted(
+                set(por_ativo.get(no["name"], [])) | set(meta.get("glossary") or [])
+            ),
             grao=" ".join(grao.group(1).split()) if grao else None,
             chaves=chaves,
             referencias=referencias,

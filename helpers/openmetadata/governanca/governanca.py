@@ -578,11 +578,19 @@ def extensao_desejada(
     return {k: v for k, v in desejada.items() if v}
 
 
+#: Propriedades que já podem estar preenchidas por outra fonte, e que por isso o
+#: sync só PREENCHE, nunca sobrescreve. Em 2026-10 cinco tabelas de `agentes`
+#: tinham nelas a cardinalidade medida via Trino e relações candidatas com o
+#: SALIC (catálogo `minc-semantic-relationships` de 2026-09-08), evidência mais
+#: rica que o grafo do dbt e que não existe no repositório para ser refeita.
+SO_PREENCHER = {"mincSemanticRelationships", "mincRelatedTables", "mincTableGrain"}
+
+
 def operacoes_de_extensao(atual: dict | None, desejada: dict[str, Any]) -> list[dict]:
     """Patch por propriedade, preservando as que não são nossas.
 
     Substituir `/extension` inteira apagaria propriedade de outro órgão ou
-    preenchida à mão.
+    preenchida à mão. As de `SO_PREENCHER` só entram onde estão vazias.
     """
     if not desejada:
         return []
@@ -592,6 +600,7 @@ def operacoes_de_extensao(atual: dict | None, desejada: dict[str, Any]) -> list[
         {"op": "add", "path": f"/extension/{chave}", "value": valor}
         for chave, valor in desejada.items()
         if not equivalente(atual.get(chave), valor)
+        and not (chave in SO_PREENCHER and atual.get(chave) not in (None, "", []))
     ]
 
 
