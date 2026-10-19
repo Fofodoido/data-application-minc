@@ -1790,3 +1790,58 @@ catálogo, e a governança não cria teste para tabela que não existe.
 `make openmetadata OPENMETADATA_ARGS=--confirmar`; em seguida
 `make governance-audit-om` para o retrato de depois. Corrigir o
 `OM_DATABASE` do `.env` local.
+
+### 2026-10-19 · Claude · Aplicado na instância (`--confirmar`)
+
+**Autorização.** O Lucas liberou a escrita na instância nesta sessão ("faz
+essas mudanças e roda"). Tudo rodou com `DB_DW_DBNAME=dbanalytics`, porque o
+`.env` local dele ainda tem `OM_DATABASE=minc` (o database velho).
+
+**Ordem e resultado.** governança → métricas → qualidade → nova simulação
+para conferir convergência → auditoria. Falhas finais: 0. Simulação depois da
+última aplicação: 1 ajuste em 3.570 (transitório; relido, estava conforme).
+Métricas (12) e qualidade (89 testes nativos, 7 suítes, 3 contratos) com 0
+ajustes na segunda passada.
+
+**Retrato de depois** (auditoria live, comparada com o de antes):
+
+| | antes | depois |
+|---|---|---|
+| produto de dados | 0% | 100% em todo produto catalogado |
+| permissão de uso (`Uso.*`) | 0% | 100% |
+| certificação Rouanet / execução federativa / indicadores | 50% / 52% / 50% | 100% |
+| domínio Rouanet | 50% | 100% |
+| linhagem de coluna silver/gold | 59 de 66 | 608 de 617 (conector dbt) |
+| casos de teste silver/gold | 66, sem resultado | 186, sem resultado |
+| métricas / contratos / suítes | 0 / 0 / 0 | 12 / 3 / 7 |
+
+Os testes seguem sem resultado porque o `dbt test` e a suíte nativa só rodam
+na DAG desta branch, que ainda não foi implantada.
+
+**Entrou durante a aplicação.**
+- `DocumentacaoMinC.NaoVerificada` (tabela e coluna) e
+  `DocumentacaoMinC.ColunasNaoVerificadas` (tabela): a marca `[NÃO VERIFICADO]`
+  e `[não documentado no dicionário…]` do YAML vira etiqueta filtrável, e a
+  auditoria conta. Pedido do Lucas.
+- `termsOfUse` do contrato vai como `{content}`; texto puro nunca convergia.
+- escrita espera até 300 s e, esgotada, vira falha sem derrubar o sync (um
+  PATCH de 64 colunas etiquetadas passou de 90 s já aplicado no servidor).
+- FK só para tabela referenciada que já está no catálogo
+  (`salic.dim_projeto_rouanet` ausente derrubava o patch de 4 golds).
+
+**Armadilha confirmada: a DAG da `main` desfaz parte disto a cada execução.**
+Às 00:00 o `sync_glossary` da `main` regravou o glossário e as relações
+tipadas voltaram a `relatedTo`; às 02:41 uma ingestão dbt apagou a
+certificação de 134 tabelas que a governança já tinha certificado. Nada se
+perde (a governança refaz), mas só para de acontecer com esta branch
+implantada, porque é a DAG dela que roda a governança por último.
+
+**Pendente.**
+- merge e implantação da branch (sem isso, a reversão acima se repete);
+- primeira execução da DAG com `OM_DBT_RUN_TESTS` e `OM_INGEST_TESTSUITE`,
+  para os 186 casos ganharem resultado e o Incident Manager funcionar;
+- o PATCH de `/severity` em `testCaseIncidentStatus` segue sem exercício
+  real, porque não houve falha de teste ainda;
+- 84 ativos declarados no dbt ainda não materializados no catálogo (quase
+  todo o `cotas`, e golds novas do Rouanet como `dim_projeto_rouanet`);
+- corrigir `OM_DATABASE=minc` no `.env` local.
