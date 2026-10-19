@@ -453,3 +453,25 @@ def test_etiqueta_nao_verificada_sai_quando_a_descricao_e_confirmada(
     }
     (op,) = operacoes_de_colunas(ativo, tabela, set(), dominios)
     assert "DocumentacaoMinC.NaoVerificada" not in {t["tagFQN"] for t in op["value"]}
+
+
+def test_escrita_que_nao_responde_vira_falha_e_o_sync_segue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Uma tabela lenta não pode interromper as outras: vira falha no fim."""
+    import requests
+
+    from openmetadata.governanca import cliente
+
+    class _Lenta(_Sessao):
+        def request(self, metodo: str, url: str, **kwargs: Any) -> _Resposta:
+            self.chamadas.append((metodo, url, kwargs))
+            raise requests.Timeout("read timed out")
+
+    monkeypatch.setattr(cliente.time, "sleep", lambda _: None)
+    sessao = _Lenta([])
+    om = ClienteOM("https://om", "t", confirmar=True, sessao=sessao)
+    ok = om.patch("tables", "1", [{"op": "add", "path": "/tags", "value": []}], "x")
+    assert not ok and len(om.falhas) == 1 and "ajustar x" in om.falhas[0]
+    assert len(sessao.chamadas) == cliente.TENTATIVAS
+    assert sessao.chamadas[0][2]["timeout"] == cliente.TEMPO_DE_ESCRITA

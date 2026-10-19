@@ -36,6 +36,10 @@ log = logging.getLogger(__name__)
 
 TENTATIVAS = 3
 PAGINA = 100
+#: Escrita espera mais que leitura: o PATCH de uma tabela com dezenas de
+#: colunas etiquetadas reindexa a busca antes de responder, e já passou de 90 s
+#: com a alteração aplicada.
+TEMPO_DE_ESCRITA = 300
 
 
 class ClienteOM:
@@ -155,7 +159,9 @@ class ClienteOM:
             self._registrar(f"criaria {rota}: {rotulo}")
             self.criados += 1
             return None
-        resposta = self._requisitar(metodo, rota, json=corpo)
+        resposta = self._escrever(metodo, rota, f"criar {rota} {rotulo}", json=corpo)
+        if resposta is None:
+            return None
         if not resposta.ok:
             self.falha(f"criar {rota} {rotulo}", resposta)
             return None
@@ -187,12 +193,15 @@ class ClienteOM:
             self._registrar(f"ajustaria {rotulo}: {campos}")
             self.atualizados += 1
             return True
-        resposta = self._requisitar(
+        resposta = self._escrever(
             "PATCH",
             f"{rota}/{ident}",
+            f"ajustar {rotulo}",
             headers={"Content-Type": "application/json-patch+json"},
             json=operacoes,
         )
+        if resposta is None:
+            return False
         if not resposta.ok:
             self.falha(f"ajustar {rotulo}", resposta)
             return False
@@ -205,12 +214,30 @@ class ClienteOM:
             self._registrar(rotulo)
             self.atualizados += 1
             return None
-        resposta = self._requisitar(metodo, rota, json=corpo)
+        resposta = self._escrever(metodo, rota, rotulo, json=corpo)
+        if resposta is None:
+            return None
         if not resposta.ok:
             self.falha(rotulo, resposta)
             return None
         self.atualizados += 1
         return resposta.json() if resposta.content else {}
+
+    def _escrever(
+        self, metodo: str, rota: str, contexto: str, **kwargs: Any
+    ) -> requests.Response | None:
+        """Escrita que, esgotadas as tentativas, vira falha no relatório.
+
+        Uma tabela que não responde não pode interromper as outras mil: o sync
+        segue, sai com erro no fim, e a próxima execução refaz o que faltou.
+        """
+        kwargs.setdefault("timeout", TEMPO_DE_ESCRITA)
+        try:
+            return self._requisitar(metodo, rota, **kwargs)
+        except RuntimeError as exc:
+            self.falhas.append(f"{contexto}: {exc}")
+            log.warning("  FALHA %s: %s", contexto, exc)
+            return None
 
     def falha(self, contexto: str, resposta: requests.Response) -> None:
         mensagem = f"{contexto}: {explicar(resposta)}"

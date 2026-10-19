@@ -633,13 +633,16 @@ def operacoes_de_extensao(atual: dict | None, desejada: dict[str, Any]) -> list[
 
 
 def restricoes_desejadas(
-    ativo: Ativo, cat: Catalogo, tabela: dict, servico: str, banco: str
+    om: ClienteOM, ativo: Ativo, cat: Catalogo, tabela: dict, servico: str, banco: str
 ) -> list[dict] | None:
     """Chaves dos testes do dbt somadas às que o banco já declara.
 
     O conector Postgres publica a chave física (as 5 que existem hoje). Elas
     ficam; as dos testes entram ao lado. Coluna que a tabela não tem é
     ignorada: o teste pode estar desatualizado, e a API recusaria o patch.
+    Pelo mesmo motivo, a FK só entra quando a tabela referenciada já está no
+    catálogo: uma dimensão ainda não materializada derrubaria o patch inteiro
+    (`Table not found`), levando etiquetas e produto junto.
     """
     colunas = {c["name"] for c in tabela.get("columns") or []}
     atuais = list(tabela.get("tableConstraints") or [])
@@ -650,7 +653,7 @@ def restricoes_desejadas(
     ]
     for coluna, alvo_id, campo in ativo.referencias:
         alvo = cat.ativos.get(alvo_id)
-        if alvo and coluna in colunas:
+        if alvo and coluna in colunas and om.existe("tables", alvo.fqn(servico, banco)):
             novas.append(
                 {
                     "constraintType": "FOREIGN_KEY",
@@ -828,7 +831,7 @@ def catalogar_tabela(
     operacoes += operacoes_de_extensao(
         tabela.get("extension"), extensao_desejada(ativo, cat, leitores, vizinhos)
     )
-    restricoes = restricoes_desejadas(ativo, cat, tabela, servico, banco)
+    restricoes = restricoes_desejadas(om, ativo, cat, tabela, servico, banco)
     if restricoes is not None:
         operacoes.append({"op": "add", "path": "/tableConstraints", "value": restricoes})
     operacoes += operacoes_de_colunas(
