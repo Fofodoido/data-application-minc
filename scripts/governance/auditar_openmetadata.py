@@ -17,6 +17,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "helpers"))
@@ -39,7 +40,12 @@ def main() -> int:
     if not (acesso.url and acesso.token):
         print("A auditoria lê a instância: defina OM_HOST e o token no .env.")
         return 1
-    cat = catalogo.montar(catalogo.carregar_manifest(args.manifest))
+    if args.manifest:
+        manifest = catalogo.carregar_manifest(args.manifest)
+    else:
+        with TemporaryDirectory(prefix="om_dbt_parse_") as tmp:
+            manifest = catalogo.carregar_manifest(catalogo.gerar_manifest(Path(tmp)))
+    cat = catalogo.montar(manifest)
     rel = auditoria.auditar(ClienteOM(acesso.url, acesso.token), cat)
     texto = rel.markdown()
     print(texto)

@@ -130,7 +130,12 @@ openmetadata-metricas:
 openmetadata-qualidade:
 	poetry run python scripts/governance/sincronizar_qualidade.py $(OPENMETADATA_ARGS)
 
-openmetadata: openmetadata-governanca openmetadata-metricas openmetadata-qualidade
+# Em sequência, nunca em paralelo, mesmo com `make -j`: produto e domínio
+# precisam existir antes da métrica e do teste que os usam.
+openmetadata:
+	$(MAKE) --no-print-directory -j1 openmetadata-governanca
+	$(MAKE) --no-print-directory -j1 openmetadata-metricas
+	$(MAKE) --no-print-directory -j1 openmetadata-qualidade
 
 # Confere o que está NA INSTÂNCIA contra o que o repositório declara. Só lê.
 # `OPENMETADATA_AUDIT=--strict` sai com erro se houver pendência.

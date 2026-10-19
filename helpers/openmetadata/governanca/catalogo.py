@@ -17,6 +17,7 @@ import logging
 import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
@@ -136,7 +137,11 @@ def gerar_manifest(destino: Path | None = None) -> Path:
     `docs generate`. Target e log vão para `destino`, nunca para dentro do
     projeto dbt, que no container é montado do repositório.
     """
-    destino = destino or config.BUILD / "dbt_target"
+    if destino is None:
+        # Pasta própria por execução: dois `dbt parse` no mesmo target
+        # entrelaçam a escrita e o manifest sai corrompido.
+        config.BUILD.mkdir(parents=True, exist_ok=True)
+        destino = Path(tempfile.mkdtemp(prefix="dbt_target_", dir=config.BUILD))
     dbt = shutil.which("dbt")
     if dbt is None:
         raise FileNotFoundError("CLI `dbt` não encontrado no PATH.")

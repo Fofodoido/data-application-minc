@@ -11,6 +11,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "helpers"))
@@ -30,7 +31,12 @@ def preparar(descricao: str) -> tuple[ClienteOM, Catalogo] | None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    cat = catalogo.montar(catalogo.carregar_manifest(args.manifest))
+    if args.manifest:
+        manifest = catalogo.carregar_manifest(args.manifest)
+    else:
+        with TemporaryDirectory(prefix="om_dbt_parse_") as tmp:
+            manifest = catalogo.carregar_manifest(catalogo.gerar_manifest(Path(tmp)))
+    cat = catalogo.montar(manifest)
     if cat.erros:
         print("Declaração inconsistente — nada é aplicado enquanto houver erro:")
         for erro in cat.erros:
