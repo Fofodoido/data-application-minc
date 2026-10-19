@@ -246,7 +246,8 @@ def test_disabling_a_middle_recipe_keeps_the_chain_whole(monkeypatch) -> None:
         "postgres_classifier",
     ]
     # Toda recipe habilitada precisa ter lugar na ordem, senao vira task solta.
-    assert habilitadas == set(encadeadas)
+    # A testsuite tem o dela: depois da governanca, que cria os casos de teste.
+    assert habilitadas == set(encadeadas) | set(config.RECIPES_DEPOIS_DA_GOVERNANCA)
 
 
 def test_every_defined_recipe_has_a_place_in_the_pipeline() -> None:
@@ -255,7 +256,9 @@ def test_every_defined_recipe_has_a_place_in_the_pipeline() -> None:
 
     definidas = {recipe.task_id for recipe in config._DEFINED_RECIPES}
 
-    assert definidas == set(config.RECIPE_PIPELINE)
+    assert definidas == set(config.RECIPE_PIPELINE) | set(
+        config.RECIPES_DEPOIS_DA_GOVERNANCA
+    )
 
 
 def test_dbt_project_dir_comes_from_the_environment(monkeypatch) -> None:
@@ -342,7 +345,15 @@ def test_profiler_is_off_and_classifier_is_on_by_default(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize(
-    "flag", ["OM_INGEST_POSTGRES", "OM_INGEST_DBT", "OM_INGEST_GLOSSARY"]
+    "flag",
+    [
+        "OM_INGEST_POSTGRES",
+        "OM_INGEST_DBT",
+        "OM_INGEST_GLOSSARY",
+        "OM_SYNC_GOVERNANCA",
+        "OM_INGEST_TESTSUITE",
+        "OM_DBT_RUN_TESTS",
+    ],
 )
 def test_declared_flags_reach_the_container(flag: str) -> None:
     """Flag que o config le mas o compose nao passa e flag morta.
@@ -383,7 +394,25 @@ def test_glossary_runs_before_every_recipe() -> None:
     )
 
     posicao_glossario = fonte.index("previous_task = (")
-    posicao_encadeamento = fonte.index("for task_id in RECIPE_PIPELINE:")
+    posicao_encadeamento = fonte.index("for t in RECIPE_PIPELINE")
     assert (
         posicao_glossario < posicao_encadeamento
     ), "o glossario precisa iniciar a corrente, antes das recipes."
+
+
+def test_governanca_fecha_a_corrente_mesmo_com_falha_antes() -> None:
+    """O conector dbt apaga a certificacao; a governanca e quem a devolve.
+
+    Por isso ela vem depois de todas as recipes de catalogo e com
+    `trigger_rule="all_done"`: presa a `all_success`, uma falha em qualquer
+    recipe deixaria as tabelas sem certificacao ate a proxima execucao boa.
+    """
+    fonte = DAG_PATH.read_text(encoding="utf-8")
+
+    assert fonte.index("for t in RECIPE_PIPELINE") < fonte.index(
+        "[reaplicar_governanca()]"
+    )
+    assert fonte.index("[reaplicar_governanca()]") < fonte.index(
+        "RECIPES_DEPOIS_DA_GOVERNANCA if t in recipe_tasks"
+    ), "a testsuite precisa vir depois da governanca, que cria os casos de teste"
+    assert 'task_id=GOVERNANCA_TASK_ID, trigger_rule="all_done"' in fonte

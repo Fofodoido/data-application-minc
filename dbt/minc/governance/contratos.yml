@@ -1,0 +1,39 @@
+version: 1
+
+# Contratos de dados das tabelas de consumo, aplicados por
+# `scripts/governance/sincronizar_qualidade.py`.
+#
+# O contrato é o que o MinC promete a quem consome a tabela: as colunas e os
+# tipos (schema), os testes que precisam passar (qualidade) e o que é preciso
+# saber antes de citar o número (termos de uso). O OpenMetadata valida o
+# contrato a cada execução dos testes e mostra na aba Contract se ele está de
+# pé.
+#
+# Só a Gold tem contrato: é a única camada de consumo oficial (ADR 0010). O
+# schema e a lista de testes NÃO são escritos aqui — saem do schema.yml e dos
+# testes que existirem na tabela, para o contrato não envelhecer em relação ao
+# modelo. O que se escreve à mão é o que o código não sabe: os termos de uso.
+#
+# `status` começa em `Draft`. Passar a `Approved` é decisão de quem responde
+# pelo produto, não da automação.
+
+padrao:
+  camadas: [gold]
+  status: Draft
+  owner_key: minc_data_engineering
+
+#: Termos de uso por produto. Texto para gente e para agente de IA: é o campo
+#: que o OpenMetadata entrega a quem pergunta "posso usar isto?".
+termos_de_uso:
+  cotas_e_territorios: >
+    Use a distribuição por cota sempre junto da cobertura de perfil do mesmo
+    ano (`cobertura_pagamentos`): 25% sobre uma cobertura de 40% não é
+    comparável a 25% sobre 90%. O valor é o pago ao agente cultural, não o
+    repassado ao ente federado — os dois diferem por ordens de grandeza. A
+    cota territorial existe só na LPG. Pagamentos sem ano entram no total e
+    ficam fora dos recortes anuais.
+  primeiro_acesso: >
+    O histórico de acesso anterior é o que existe nas bases federais
+    integradas, não uma verificação completa: ausência de registro não prova
+    ausência de acesso. Cite o percentual de primeiro acesso dizendo isso, e
+    dizendo quais mecanismos entram no histórico.

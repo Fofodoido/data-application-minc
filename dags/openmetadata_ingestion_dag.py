@@ -1,9 +1,20 @@
 """DAG de ingestao de metadados do MinC no OpenMetadata.
 
-O codigo de apoio vive em `helpers/openmetadata/`
+Ordem, e por que ela nao e negociavel:
+
+    sync_glossary          os termos precisam existir antes do conector dbt
+      -> recipes           catalogo: Airflow, Postgres, dbt (com `dbt test`),
+                           profiler, classifier, Superset
+      -> reaplicar_governanca   produto, uso, certificacao, formato, chaves,
+                                metricas, contratos e testes nativos
+      -> postgres_testsuite     executa os testes nativos criados acima
+      -> classificar_incidentes severidade pelo tier da tabela
+
+O codigo de apoio vive em `helpers/openmetadata/`.
 """
 
 from datetime import datetime, timedelta
+from typing import Any
 
 from airflow.sdk import dag, task
 from schedule_loader import get_dynamic_schedule
@@ -12,9 +23,22 @@ from openmetadata.config import (
     ALL_RECIPES,
     GLOSSARY_DEFINITION_PATH,
     GLOSSARY_TASK_ID,
+    GOVERNANCA_TASK_ID,
+    INCIDENTES_TASK_ID,
     INGEST_GLOSSARY,
     RECIPE_PIPELINE,
+    RECIPES_DEPOIS_DA_GOVERNANCA,
+    SYNC_GOVERNANCA,
 )
+
+
+def _encadear(anterior: Any, tarefas: list[Any]) -> Any:
+    """Liga as tarefas em fila, a partir de `anterior`. Devolve a ultima."""
+    for tarefa in tarefas:
+        if anterior is not None:
+            anterior >> tarefa
+        anterior = tarefa
+    return anterior
 
 
 @dag(
@@ -62,17 +86,13 @@ def openmetadata_ingestion_dag() -> None:
 
     @task(task_id=GLOSSARY_TASK_ID)
     def sync_glossary(glossary_definition_path: str) -> dict:
-        """Cria ou atualiza o glossario MinC antes de qualquer recipe rodar.
+        """Cria os termos do glossario MinC que faltam, antes de qualquer recipe.
 
         Precisa vir ANTES: `meta.openmetadata.glossary` nos schema.yml apenas
-        referencia termo por FQN. Quem cria o termo e este sync, e uma
-        referencia a FQN que nao existe no servidor nao derruba a ingestao --
-        ela e descartada em silencio, e o ativo chega ao catalogo sem o
-        vinculo. Ate hoje os 26 termos foram aplicados a mao em algum momento,
-        e editar `glossaries/minc.csv` nao chegava ao servidor.
-
-        E idempotente e nao remove termo remoto: sincroniza a hierarquia
-        primeiro e as relacoes depois, quando todos os FQNs ja existem.
+        referencia termo por FQN, e uma referencia a FQN que nao existe no
+        servidor e descartada em silencio -- o ativo chega ao catalogo sem o
+        vinculo. Conteudo e relacoes dos termos que ja existem sao atualizados
+        pela `reaplicar_governanca`, no fim.
         """
         from airflow.sdk import Variable
 
@@ -83,6 +103,78 @@ def openmetadata_ingestion_dag() -> None:
             host_port=Variable.get("OM_HOST"),
             jwt_token=Variable.get("INGESTION_TOKEN"),
         )
+
+    # `all_done`: roda mesmo que uma recipe antes dela falhe, e isso e
+    # deliberado. E a unica task que devolve a certificacao que o conector dbt
+    # apaga; presa a `all_success`, uma falha em qualquer recipe -- inclusive
+    # uma sem relacao com o catalogo, como a do Airflow -- terminaria a execucao
+    # com as tabelas sem certificacao. O sync e idempotente e so aplica o que
+    # esta declarado no repositorio: rodar a mais nao custa nada.
+    @task(task_id=GOVERNANCA_TASK_ID, trigger_rule="all_done")
+    def reaplicar_governanca() -> dict:
+        """Governanca, metricas e qualidade declaradas em dbt/minc/governance/.
+
+        Falha se o sync registrar falha, depois de tentar tudo: um ativo
+        recusado nao impede os outros 1.200 de serem catalogados.
+        """
+        import logging
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        from airflow.sdk import Variable
+
+        from openmetadata.glossary import load_glossary
+        from openmetadata.governanca import (
+            catalogo,
+            config,
+            governanca,
+            metricas,
+            qualidade,
+        )
+        from openmetadata.governanca.cliente import ClienteOM
+
+        with TemporaryDirectory(prefix="om_gov_") as tmp:
+            cat = catalogo.montar(
+                catalogo.carregar_manifest(catalogo.gerar_manifest(Path(tmp)))
+            )
+        if cat.erros:
+            raise RuntimeError(
+                "Declaracao de governanca inconsistente:\n" + "\n".join(cat.erros)
+            )
+        om = ClienteOM(
+            Variable.get("OM_HOST"), Variable.get("INGESTION_TOKEN"), confirmar=True
+        )
+        _, termos = load_glossary(str(config.GLOSSARIO))
+        governanca.sincronizar(om, cat, termos)
+        metricas.sincronizar(om, cat)
+        resumo = qualidade.sincronizar(om, cat)
+        logging.info("Governanca aplicada: %s", resumo)
+        if om.falhas:
+            raise RuntimeError(
+                f"{len(om.falhas)} falhas na governanca:\n" + "\n".join(om.falhas[:50])
+            )
+        return resumo
+
+    @task(task_id=INCIDENTES_TASK_ID, trigger_rule="all_done")
+    def classificar_incidentes() -> dict:
+        """Severidade do tier da tabela nos incidentes que os testes abriram."""
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        from airflow.sdk import Variable
+
+        from openmetadata.governanca import catalogo, config, qualidade
+        from openmetadata.governanca.cliente import ClienteOM
+
+        with TemporaryDirectory(prefix="om_gov_") as tmp:
+            cat = catalogo.montar(
+                catalogo.carregar_manifest(catalogo.gerar_manifest(Path(tmp)))
+            )
+        om = ClienteOM(
+            Variable.get("OM_HOST"), Variable.get("INGESTION_TOKEN"), confirmar=True
+        )
+        qualidade.classificar_incidentes(om, cat, config.servico(), config.banco())
+        return om.resumo()
 
     recipe_tasks = {
         recipe.task_id: run_openmetadata_recipe.override(task_id=recipe.task_id)(
@@ -100,13 +192,20 @@ def openmetadata_ingestion_dag() -> None:
         if INGEST_GLOSSARY
         else None
     )
-    for task_id in RECIPE_PIPELINE:
-        current_task = recipe_tasks.get(task_id)
-        if current_task is None:
-            continue
-        if previous_task is not None:
-            previous_task >> current_task
-        previous_task = current_task
+    previous_task = _encadear(
+        previous_task, [recipe_tasks[t] for t in RECIPE_PIPELINE if t in recipe_tasks]
+    )
+
+    # Sem governanca nao ha caso de teste nativo para executar nem incidente
+    # para classificar: as tres tasks so existem juntas. Instanciar e nao
+    # encadear deixaria task orfa, que o Airflow roda sem dependencia nenhuma.
+    if SYNC_GOVERNANCA:
+        _encadear(
+            previous_task,
+            [reaplicar_governanca()]
+            + [recipe_tasks[t] for t in RECIPES_DEPOIS_DA_GOVERNANCA if t in recipe_tasks]
+            + [classificar_incidentes()],
+        )
 
 
 openmetadata_ingestion_dag()

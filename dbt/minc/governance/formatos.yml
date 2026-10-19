@@ -1,0 +1,195 @@
+version: 1
+
+# Como o dado está escrito em cada coluna — o que responde "o CPF vem com ou
+# sem pontuação?", "o código IBGE tem 6 ou 7 dígitos?", "o valor está em reais
+# ou em centavos?" sem abrir a tabela.
+#
+# Cada formato vira uma etiqueta da classificação `FormatoMinC` (declarada em
+# dominios.yml) pendurada na COLUNA. Formato que declara `regex` vira também um
+# teste nativo do OpenMetadata (`columnValuesToMatchRegex`) nas camadas de
+# `qualidade.yml`: a etiqueta diz o que se espera, o teste confere, e uma
+# divergência abre incidente.
+#
+# Duas vias de aplicação, a primeira que existir vence:
+#   1. `meta.formato: <nome>` na coluna do schema.yml/sources.yml — a exceção
+#      decidida por quem conhece a coluna;
+#   2. `regras`, abaixo, por nome e tipo de coluna — a operação em massa, que
+#      vale também para coluna criada depois.
+#
+# Regra de ouro: só se afirma formato que o código ou a documentação sustentam.
+# Onde a origem não garante nada (CPF digitado no SALIC, por exemplo), o
+# formato é "como na origem" e diz o que fazer antes de cruzar — afirmar "só
+# dígitos" ali seria o catálogo mentindo com autoridade.
+
+formatos:
+  - name: DocumentoSoDigitos
+    display_name: CPF/CNPJ só com dígitos
+    regex: '^([0-9]{11}|[0-9]{14})$'
+    description: >
+      CPF com 11 ou CNPJ com 14 dígitos, sem ponto, barra, hífen ou espaço, e
+      com o zero à esquerda preservado. Texto, nunca número — como inteiro o
+      zero à esquerda se perde e a chave deixa de casar. É o formato de junção
+      entre bases (macro `normaliza_documento`). NULL quando o documento veio
+      mascarado na origem.
+
+  - name: DocumentoComoNaOrigem
+    display_name: CPF/CNPJ como gravado na origem
+    description: >
+      CPF ou CNPJ exatamente como o sistema de origem o gravou: pode ter
+      pontuação, máscara com asterisco ou ter perdido o zero à esquerda. Não
+      use para cruzar bases antes de normalizar com a macro
+      `normaliza_documento`, que mantém só os dígitos.
+
+  - name: PRONAC
+    display_name: PRONAC (texto)
+    regex: '^[0-9]{5,7}$'
+    description: >
+      Número do projeto na Lei Rouanet como texto: dois dígitos de ano seguidos
+      do sequencial como registrado, de 5 a 7 posições. Não preencher com zero:
+      completar o sequencial muda a chave.
+
+  - name: PRONACNumerico
+    display_name: PRONAC (inteiro)
+    description: >
+      PRONAC guardado como inteiro. O zero inicial do ano se perde (projeto de
+      2001 aparece com 4 ou 5 dígitos); para cruzar com a forma texto, use a
+      macro `pronac_de_ano_sequencial` ou o mapa `map_chave_projeto_rouanet`.
+
+  - name: CodigoIBGEMunicipio7
+    display_name: Código IBGE do município (7 dígitos)
+    regex: '^[0-9]{7}$'
+    description: >
+      Código de município do IBGE com 7 dígitos, o último sendo o verificador.
+      É o formato do Censo e da maioria das bases federais.
+
+  - name: CodigoIBGEMunicipio6
+    display_name: Código IBGE do município (6 dígitos)
+    regex: '^[0-9]{6}$'
+    description: >
+      Código de município do IBGE SEM o dígito verificador, como o SALIC grava.
+      Não cruza com o código de 7 dígitos sem tratamento: compare pelos seis
+      primeiros dígitos do código completo.
+
+  - name: CodigoIBGEUF
+    display_name: Código IBGE da UF (2 dígitos)
+    description: >
+      Código numérico da unidade da federação no IBGE (11 a 53), não a sigla.
+
+  - name: SiglaUF
+    display_name: Sigla da UF
+    regex: '^[A-Z]{2}$'
+    description: >
+      Sigla da unidade da federação com duas letras maiúsculas (DF, SP...).
+
+  - name: CEPSoDigitos
+    display_name: CEP só com dígitos
+    regex: '^[0-9]{8}$'
+    description: >
+      CEP com 8 dígitos, sem hífen, como texto para preservar o zero à
+      esquerda. Dado pessoal quando é endereço de pessoa física.
+
+  - name: MoedaBRL
+    display_name: Valor em reais
+    description: >
+      Valor monetário em reais, com ponto como separador decimal e sem símbolo
+      de moeda nem separador de milhar. Tipo numérico: some e compare
+      diretamente, sem conversão.
+
+  - name: AnoCivil
+    display_name: Ano com 4 dígitos
+    description: >
+      Ano civil com quatro dígitos (2023), como número inteiro.
+
+  - name: AnoOuSemAno
+    display_name: Ano ou 'sem_ano'
+    regex: '^([0-9]{4}|sem_ano)$'
+    description: >
+      Ano com quatro dígitos, ou o literal `sem_ano` quando a datação não foi
+      possível. Os `sem_ano` entram no total, mas ficam fora de qualquer
+      recorte anual.
+
+  - name: DataISO
+    display_name: Data (tipo date)
+    description: >
+      Data sem hora, do tipo `date` do Postgres (AAAA-MM-DD na exportação).
+
+  - name: DataHoraSemFuso
+    display_name: Data e hora sem fuso
+    description: >
+      Data e hora do tipo `timestamp without time zone`. O fuso não é gravado
+      na coluna: o valor é o horário que o sistema de origem registrou.
+
+  - name: CoordenadaDecimal
+    display_name: Coordenada em graus decimais
+    description: >
+      Latitude ou longitude em graus decimais (WGS 84), com sinal: negativo é
+      sul ou oeste. NULL quando ausente ou fora do intervalo válido.
+
+#: Aplicação em massa. Avaliadas em ordem; a primeira que casar vale.
+#:   colunas   nomes exatos (minúsculas)
+#:   padrao    expressão regular sobre o nome da coluna
+#:   tipos     `data_type` declarado no dbt (o que o catálogo publica)
+#:   camadas   restringe a camadas (raw, bronze, silver, intermediate, gold)
+#:   exceto    nomes de modelo/source onde a regra NÃO vale
+#: Uma regra sem `tipos` vale para qualquer tipo; sem `camadas`, para todas.
+regras:
+  # Documento normalizado: só existe a partir da silver, onde a macro roda.
+  - formato: DocumentoSoDigitos
+    colunas: [identificador_unico, beneficiario_documento]
+    tipos: [text]
+
+  # Documento cru do SALIC, do relatório de gestão e do BB Ágil. Nenhuma origem
+  # garante máscara nem ausência dela.
+  - formato: DocumentoComoNaOrigem
+    padrao: '^(cgccpf|cnpjcpf|cpfcnpj|nrcnpjcpf|nrcpf|cgccpfmecena|nrcnpjcpfincentivador|cpf|cnpj|cpf_cnpj|documento|beneficiarydocumentid)$'
+    tipos: [text]
+
+  - formato: PRONAC
+    colunas: [pronac, nrpronac]
+    tipos: [text]
+  - formato: PRONACNumerico
+    colunas: [pronac, nrpronac]
+    tipos: [integer, bigint]
+
+  - formato: CodigoIBGEMunicipio6
+    colunas: [idmunicipioibge]
+  - formato: CodigoIBGEMunicipio7
+    colunas: [cod_ibge]
+  - formato: CodigoIBGEUF
+    colunas: [iduf]
+    tipos: [integer, smallint]
+
+  - formato: SiglaUF
+    colunas: [uf, sguf, ufprojeto, sigla_uf, org_uf]
+    tipos: [text]
+
+  - formato: CEPSoDigitos
+    padrao: '^([a-z]+_)?cep[0-9]*$'
+    tipos: [text]
+
+  - formato: AnoOuSemAno
+    colunas: [ano_final]
+    tipos: [text]
+  - formato: AnoCivil
+    colunas: [ano, ano_edital, ano_referencia]
+    tipos: [integer, smallint]
+
+  # Só nome que diz o que é. `valor` sozinho fica de fora: na `serie_sgs` do
+  # Bacen ele é o valor da série, não reais; e `valora`..`valore` do SALIC não
+  # têm significado documentado.
+  - formato: MoedaBRL
+    padrao: '^(valor|vl)_[a-z_]+$'
+    tipos: [numeric]
+  - formato: MoedaBRL
+    colunas: [valorunitario, valorconvenio, valortotal, valorsolicitado, valoraprovado, valorcaptado]
+    tipos: [numeric]
+
+  - formato: CoordenadaDecimal
+    colunas: [latitude, longitude]
+    tipos: [numeric, double precision]
+
+  # Por tipo: vale para qualquer nome, por isso fica por último.
+  - formato: DataISO
+    tipos: [date]
+  - formato: DataHoraSemFuso
+    tipos: [timestamp, timestamp without time zone]

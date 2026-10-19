@@ -1,0 +1,61 @@
+version: 1
+
+# Métricas de negócio no OpenMetadata, aplicadas por
+# `scripts/governance/sincronizar_metricas.py`.
+#
+# A definição das métricas NÃO está aqui: está no MetricFlow do projeto dbt
+# (`models/cotas_dbt/gold/metrics.yml` e os `semantic_models.yml`). Daí saem
+# nome, rótulo, descrição, tipo, unidade, granularidade, a expressão SQL e a
+# tabela de onde a métrica é calculada — que vira aresta de linhagem tabela ->
+# métrica. Uma métrica nova no dbt aparece no catálogo sem tocar neste arquivo.
+#
+# Este arquivo declara só o que o MetricFlow não sabe: a que conceito do
+# glossário cada métrica responde. É essa ligação que põe a métrica no
+# Explorador de Ontologia — ele só desenha métrica que tem termo de glossário.
+# Métrica sem entrada aqui é publicada mesmo assim, só que fora do grafo, e a
+# auditoria a lista como isolada.
+
+termos_por_metrica:
+  valor_total_pago:
+    - MinC.Cotas.ValorPonderado
+  valor_pago_com_perfil:
+    - MinC.Qualificadores.CoberturaDePerfil
+  agentes_contemplados:
+    - MinC.Agentes.Contemplado
+    - MinC.Identificadores.IdentificadorUnico
+  valor_pago_agentes_negros:
+    - MinC.Cotas.CotaRacial
+  valor_pago_agentes_indigenas:
+    - MinC.Cotas.CotaIndigena
+  valor_pago_agentes_pcd:
+    - MinC.Cotas.CotaPCD
+  valor_pago_territorio_vulneravel:
+    - MinC.Cotas.TerritorioVulnerabilizado
+  participacao_agentes_negros:
+    - MinC.Cotas.CotaRacial
+    - MinC.Cotas.ValorPonderado
+  participacao_agentes_indigenas:
+    - MinC.Cotas.CotaIndigena
+    - MinC.Cotas.ValorPonderado
+  participacao_agentes_pcd:
+    - MinC.Cotas.CotaPCD
+    - MinC.Cotas.ValorPonderado
+  participacao_territorio_vulneravel:
+    - MinC.Cotas.TerritorioVulnerabilizado
+    - MinC.Cotas.ValorPonderado
+  cobertura_perfil_valor:
+    - MinC.Qualificadores.CoberturaDePerfil
+
+#: Unidade de medida do OpenMetadata para cada agregação do MetricFlow. Valor
+#: em reais não tem unidade nativa (`DOLLARS` seria falso): vai como `OTHER`
+#: com a unidade escrita.
+unidade_por_medida:
+  sum: {unidade: OTHER, unidade_customizada: BRL}
+  count: {unidade: COUNT}
+  count_distinct: {unidade: COUNT}
+#: Métrica `ratio` do MetricFlow é sempre fração entre duas métricas.
+unidade_de_razao: {unidade: PERCENTAGE}
+
+#: O nome da métrica é GLOBAL na instância compartilhada. Prefixo para não
+#: colidir com a métrica de outro órgão que se chame `valor_total_pago`.
+prefixo_de_nome: minc_

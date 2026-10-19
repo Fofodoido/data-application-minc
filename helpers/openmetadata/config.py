@@ -67,6 +67,19 @@ GLOSSARY_DEFINITION_PATH = os.environ.get(
 )
 GLOSSARY_TASK_ID = "sync_glossary"
 
+# A governanca declarada em dbt/minc/governance/ -- produto, uso, certificacao,
+# formato, chaves, metricas, contratos e testes nativos. Roda DEPOIS de todas
+# as recipes, sempre: o conector dbt apaga a certificacao das tabelas, e e esta
+# etapa que a devolve. Desligar e para investigacao, nao para operacao.
+SYNC_GOVERNANCA = _flag("OM_SYNC_GOVERNANCA", default=True)
+GOVERNANCA_TASK_ID = "reaplicar_governanca"
+
+# Executa os testes nativos declarados em qualidade.yml. Le dado do banco
+# (regex por coluna, contagem de linhas), por isso fica so nas camadas silver,
+# intermediate e gold -- nunca na bronze de 157 M de linhas do SALIC.
+INGEST_TESTSUITE = _flag("OM_INGEST_TESTSUITE", default=True)
+INCIDENTES_TASK_ID = "classificar_incidentes"
+
 
 COMMON_REPLACEMENTS = {
     "DB_DW_HOST": os.environ.get("DB_DW_HOST", "postgres"),
@@ -139,6 +152,16 @@ SUPERSET_METADATA_RECIPE = RecipeDefinition(
     variaveis=VARIAVEIS_SUPERSET,
 )
 
+POSTGRES_TESTSUITE_RECIPE = RecipeDefinition(
+    task_id="postgres_testsuite",
+    # Sem a governanca nao ha caso de teste nativo, e a task ficaria orfa.
+    enabled=INGEST_TESTSUITE and SYNC_GOVERNANCA,
+    recipe_path=f"{OPENMETADATA_RECIPES_DIR}/postgres_testsuite.yaml",
+    command="test",
+    replacements=COMMON_REPLACEMENTS,
+    variaveis=VARIAVEIS_INGESTAO,
+)
+
 DBT_METADATA_RECIPE = RecipeDefinition(
     task_id="dbt_metadata",
     enabled=INGEST_DBT,
@@ -156,6 +179,7 @@ _DEFINED_RECIPES = (
     POSTGRES_CLASSIFIER_RECIPE,
     SUPERSET_METADATA_RECIPE,
     DBT_METADATA_RECIPE,
+    POSTGRES_TESTSUITE_RECIPE,
 )
 
 # A DAG so enxerga o que esta ligado. Uma recipe desligada nao vira task, entao
@@ -172,3 +196,8 @@ RECIPE_PIPELINE = (
     "postgres_classifier",
     "superset_metadata",
 )
+
+# Depois das recipes de catalogo, a governanca cria os casos de teste nativos;
+# so entao a suite deles tem o que executar. Por isso a testsuite nao esta em
+# RECIPE_PIPELINE: ela vem depois da task de governanca.
+RECIPES_DEPOIS_DA_GOVERNANCA = ("postgres_testsuite",)

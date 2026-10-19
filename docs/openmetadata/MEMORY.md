@@ -48,7 +48,7 @@ vem depois dela.
 
 ## 1. Estado atual
 
-**Última atualização: 2026-09-03 00:40 -03 · Codex (F13/F14 parciais; auditoria live em §18)**
+**Última atualização: 2026-10-18 · Claude (F6 implementada na `feat/openmetadata-governanca`, não aplicada; ver §19)**
 
 | Item | Situação |
 |---|---|
@@ -56,11 +56,11 @@ vem depois dela.
 | MinC — DAG | `dags/openmetadata_ingestion_dag.py`, `@task` normal, segredo por `Variable` |
 | MinC — recipes | 6, serviço `MinC` / `MinC - Airflow` / `MinC - Superset` |
 | MinC — governança dbt | `meta.openmetadata` em 8 `schema.yml` (71 blocos), domínio/tier/owner/glossary |
-| MinC — camada declarativa REST | ❌ **não existe** |
+| MinC — camada declarativa REST | 🟡 **implementada, não aplicada**: `dbt/minc/governance/` + `helpers/openmetadata/governanca/`, na `feat/openmetadata-governanca`. Simulação contra a instância limpa (0 falhas); `--confirmar` aguarda o Lucas. Ver §19 |
 | MinC — `markDeletedTables` | ✅ `false` explícito em `postgres_metadata.yaml`, com dois testes (F2) |
 | MinC — `glossary.py` | ✅ ligado na DAG como primeira task, antes das recipes (F3) |
 | MinC — `semantic_relationships.py` | ⚠️ segue **órfão**, de propósito: valida `kind: MCIDSemanticRelationshipCatalog` e não existe catálogo desse formato aqui |
-| MinC — `lineage.py` | ✅ em uso por 7 DAGs do `transferegov_fundo_a_fundo` |
+| MinC — `lineage.py` | ⚠️ em uso por 7 DAGs do `transferegov_fundo_a_fundo`, mas apontava para o database antigo `MinC.minc` até a correção de §19 (`DB_DW_DBNAME` passa a vencer) |
 | MinC — testes OM | 660 linhas, 26 funções / 28 casos coletados (`test_openmetadata_packaging.py`, `..._execution.py`); validação desta sessão: 25 passed, 3 skipped em ambiente emprestado |
 | Cidades — integração OM | ⚠️ na branch `fixture/ajustes-conjuntura`, **não mergeada** |
 | Cidades — DAG | `@task.virtualenv` (255 pacotes) por causa do Airflow 2.8.1; ⚠️ sync de glossário/relações provavelmente perde o global `SEGREDOS_INGESTAO` ao serializar (§7) |
@@ -335,6 +335,30 @@ Isto não bloqueia as outras frentes. Vale como frente **F1**, independente.
   timeouts de parse subiram no `docker-compose.yml`. Sumiram `make dbt-manifest`,
   `scripts/gerar_manifest_dbt.sh` e `tests/test_dbt_manifest.py`. Ver ADR 0007.
   As menções ao manifest versionado abaixo são registro histórico.
+- **`OM_DATABASE=minc` aponta para o catálogo morto.** O database vivo é
+  `MinC.dbanalytics` (1.774 tabelas); `MinC.minc` tem 647 tabelas paradas. O
+  `local.env` trazia `OM_DATABASE=minc` e o `lineage.py` tinha `minc` como
+  default: a linhagem das DAGs ia para o lugar errado sem erro. A simulação da
+  governança casou 69 tabelas em vez de 1.227 pelo mesmo motivo. Corrigido:
+  `DB_DW_DBNAME` vence. **O `.env` de quem já copiou o modelo continua errado.**
+- **`dbt docs generate` grava um `run_results.json` sem teste.** Era o único
+  comando da DAG do OM: os casos de teste do dbt chegavam ao catálogo, todos
+  sem resultado, e nenhum incidente abria. `dbt test` precisa rodar DEPOIS do
+  `docs generate`, senão o arquivo é sobrescrito.
+- **Vírgula sem aspas no `minc.csv` truncava a descrição** (caso de
+  `MinC.IncentivoFiscal`), e o resto virava sinônimo. `load_glossary` agora
+  reprova linha com campo a mais.
+- **`PUT` de termo de glossário só aceita relação genérica.** Relação tipada
+  (`broader`, `partOf`…) só por `PATCH /relatedTerms` com `TermRelation`. Por
+  isso o `glossary.py` só cria termos, e as relações moram em `termos_minc.yml`.
+- **Suíte lógica executada não pode conter teste do dbt**: o OpenMetadata
+  tentaria rodá-lo e falharia sempre. A suíte da recipe `postgres_testsuite`
+  (`minc_testes_nativos`) só tem nativos; as suítes por produto são de
+  observação.
+- **O hook de pre-commit roda `make format` no repositório inteiro.** Com
+  black em Python 3.11 ele reformata dezenas de arquivos alheios e falha em
+  `scripts/perfilar_colunas.py` (f-string com barra, sintaxe do 3.12),
+  abortando o commit. Restaure os arquivos alheios antes de tentar de novo.
 - **`lpad` do Postgres TRUNCA.** `lpad('2023', 2, '0')` devolve `'20'`, sem
   aviso. Toda montagem de PRONAC a partir de `anoprojeto`/`sequencial` precisa
   do guarda de regex ANTES do `lpad` — é o que a macro `pronac_de_ano_sequencial`
@@ -361,6 +385,10 @@ Isto não bloqueia as outras frentes. Vale como frente **F1**, independente.
 | 2026-09-01 | A divergência de empacotamento (venv isolado × imagem) **não** é convergida | É consequência do Airflow 2 no Cidades. Some quando ele subir para o 3 |
 | 2026-09-01 | Ao portar a recipe de Superset, vale a forma do **MinC** (`SupersetAPI`) | Não exige credencial de banco de terceiro — e foi a forma do Cidades que vazou senha |
 | — | *(aberto)* Onde mora o núcleo comum — cópia sincronizada, pacote ou submódulo | Ver §5 |
+| 2026-10-18 | Governança do OM é declarada em `dbt/minc/governance/` e aplicada por PATCH depois dos conectores; conectores seguem a única fonte da estrutura | ADR 0013 (proposto). Sem isso, 0 de 1.774 tabelas tinham produto, e a certificação some a cada execução do conector dbt |
+| 2026-10-18 | `dbt test` roda na DAG do OM, sem a bronze do SALIC | Lucas: resultado de teste precisa chegar ao catálogo para haver incidente. 495 testes no recorte; os 4.883 da bronze varreriam 157 M de linhas |
+| 2026-10-18 | Alerta de qualidade só dentro do OpenMetadata (incidente + feed) | Lucas, 2026-10-18 |
+| 2026-10-18 | Linhagem de coluna fica só com o conector dbt | Ele já a calcula do SQL compilado (6–23 colunas por aresta, fonte `DbtLineage`); um segundo writer brigaria com ele. A auditoria mede a cobertura |
 
 ---
 
@@ -376,7 +404,7 @@ disjuntos rodam em paralelo sem conflito.** Marque o estado ao assumir.
 | F3 | Ligar `glossary` e `semantic_relationships` na DAG | minc | ✅ FEITO · Claude · 2026-09-02 19:40 -03 — só o glossário, como a própria frente recomendava |
 | F4 | Flags `OM_INGEST_POSTGRES` / `OM_INGEST_DBT` | minc | ✅ FEITO · Claude · 2026-09-02 19:40 -03 |
 | F5 | Definir e implementar o núcleo comum | ambos | 🟡 LIVRE — decidir §5 antes |
-| F6 | Extrair núcleo e adaptar `scripts/governance/` + declarar `dbt/minc/governance/*.yml` | minc | 🟡 LIVRE — maior; não copiar integralmente (§12) |
+| F6 | Extrair núcleo e adaptar `scripts/governance/` + declarar `dbt/minc/governance/*.yml` | minc | 🟡 IMPLEMENTADA · Claude · 2026-10-18 · branch `feat/openmetadata-governanca`; falta `--confirmar` e a primeira execução da DAG — ver §19 |
 | F7 | Portar `lineage.py` para o Cidades | cidades | 🟢 LIVRE |
 | F8 | Portar o teste anti-credencial para o Cidades | cidades | ✅ FEITO em `88a110a` (`test_openmetadata_recipes.py`) |
 | F9 | SALIC: bronze e silver para RAG | minc | 🟣 EM CURSO na `feat/dbt-salic-silver`; bronze concluída (571), plano silver em F11 |
@@ -1700,3 +1728,65 @@ do deploy desta branch, disparar `minc_cosmos_dag`; manter os oito modelos
 `Disabled` até revisar resultados, cobertura, duplicidades e reconciliações do
 run. F13 ainda precisa do mestre/perfil temporal e F14 precisa de município
 oficial, ponte ampla de projeto, fontes de vulnerabilidade e regra multicidade.
+
+---
+
+## 19. Governança declarativa do MinC no OpenMetadata — entrega da F6
+
+### 2026-10-18 · Claude · Implementação e simulação (nada escrito na instância)
+
+**Pedido do Lucas.** Catálogo com tipagem, linhagem, modelos dbt, descrições
+de tabela e coluna, como o dado é disponibilizado (CPF com ou sem pontuação),
+testes, produtos de dados, domínios, glossário, ontologia, classificação,
+métricas, operação em massa de coluna, observabilidade com incidentes.
+Decisões dele nesta sessão: simulação primeiro e ele aplica; `dbt test` na DAG
+do OM; alerta só dentro do OpenMetadata; comentários de código dizem o que é e
+por quê, sem comparar com outro repositório.
+
+**Retrato de antes** (auditoria live, `MinC.dbanalytics`): 0% das tabelas com
+produto ou permissão de uso; Rouanet com 50% de domínio e tier; 66 casos de
+teste silver/gold, todos sem resultado; schemas `cotas` e `mapas` ausentes do
+catálogo; 547 tabelas no catálogo sem declaração no dbt (legado `bronze` e
+parte do `salic_bronze`).
+
+**O que entrou.**
+
+- `dbt/minc/governance/`: `dominios.yml` (5 domínios existentes + `Cultura.Indicadores`,
+  6 produtos por pasta dbt e source, camada por ativo, tier/certificação/uso
+  por camada, classificação `FormatoMinC`, 6 propriedades `minc*`),
+  `servicos.yml`, `schemas.yml` (23 schemas), `formatos.yml` (15 formatos, 16
+  regras em massa), `termos_minc.yml` (relações tipadas + aplicação por tabela
+  e coluna), `metricas.yml`, `qualidade.yml`, `contratos.yml`.
+- `helpers/openmetadata/governanca/`: `catalogo.py` (fail-closed, do
+  manifest), `cliente.py` (paginação, retry, displayName separado),
+  `governanca.py`, `metricas.py`, `qualidade.py`, `auditoria.py`.
+- DAG: `reaplicar_governanca` (`all_done`) → `postgres_testsuite` →
+  `classificar_incidentes`, depois das recipes. `dbt test` no
+  `dbt_artifacts.py`. Flags `OM_SYNC_GOVERNANCA`, `OM_INGEST_TESTSUITE`,
+  `OM_DBT_RUN_TESTS`.
+- `make openmetadata`, `openmetadata-{governanca,metricas,qualidade}`,
+  `governance-audit-om`. ADR 0013 (proposto).
+
+**Simulação (só leitura) contra a instância, com `DB_DW_DBNAME=dbanalytics`:**
+governança 31 criações e 2.474 ajustes em 1.227 tabelas, 0 falhas; métricas
+12 criações, 0 falhas; qualidade 27 criações (17 testes nativos, 7 suítes, 3
+contratos), 0 falhas. Os números de qualidade crescem na primeira execução da
+DAG: as silvers do SALIC, a silver do `mapas` e o `cotas` ainda não estão no
+catálogo, e a governança não cria teste para tabela que não existe.
+
+**Verificado.** `pytest` completo passa (31 testes novos em
+`test_governanca_openmetadata.py`, mais 1 em `test_openmetadata_packaging.py`);
+`black`, `ruff` e `mypy` limpos nos arquivos novos.
+
+**NÃO verificado.**
+- Nenhuma escrita: o `--confirmar` não rodou. Duas execuções seguidas devem
+  terminar com `atualizados=0`; isso só se confirma depois da primeira.
+- O PATCH de `/severity` em `testCaseIncidentStatus` não foi exercitado contra
+  a instância.
+- A DAG não foi parseada num Airflow 3 real.
+- O `dbt test` dentro da DAG não rodou (exige o banco).
+
+**Próximo passo.** O Lucas roda `make openmetadata` (simulação) e depois
+`make openmetadata OPENMETADATA_ARGS=--confirmar`; em seguida
+`make governance-audit-om` para o retrato de depois. Corrigir o
+`OM_DATABASE` do `.env` local.

@@ -90,6 +90,11 @@ x-airflow-environment: &airflow-common-env
   # deficiencia. Ligue depois de verificar as exclusoes de coluna sensivel.
   OM_INGEST_PROFILER: ${OM_INGEST_PROFILER:-false}
   OM_INGEST_CLASSIFIER: ${OM_INGEST_CLASSIFIER:-true}
+  # Governanca declarada em dbt/minc/governance/, testes nativos e o `dbt test`
+  # que leva o resultado dos testes do dbt ao catalogo.
+  OM_SYNC_GOVERNANCA: ${OM_SYNC_GOVERNANCA:-true}
+  OM_INGEST_TESTSUITE: ${OM_INGEST_TESTSUITE:-true}
+  OM_DBT_RUN_TESTS: ${OM_DBT_RUN_TESTS:-true}
   OM_DBT_PROJECT_DIR: ${OM_DBT_PROJECT_DIR:-dbt/minc}
   # BSC / SERPRO (bbágil) — interpoladas do .env do project dir. Passadas aqui na
   # `environment:` porque a diretiva `env_file` não injetou as vars neste setup;

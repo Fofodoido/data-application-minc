@@ -51,6 +51,7 @@ mesmo se a execução levantar. **O token nunca toca disco fora dali.**
 | `recipes/*.yaml` | uma recipe por fonte | Não — filtros de schema e nome de serviço |
 | `glossaries/minc.*` | os termos do MinC | Não — é conteúdo |
 | `semantic_relationships.py` | catálogo de relações semânticas | Ver "não conectado", abaixo |
+| `governanca/` | governança declarativa: catálogo derivado do manifest, cliente da API, sync de governança, métricas, qualidade e auditoria | Não — lê `dbt/minc/governance/` |
 
 `rendering.py` **levanta** se sobrar um `${...}` sem valor. É de propósito: sem
 isso a recipe seguia com o literal `${INGESTION_TOKEN}` no lugar do token, o
@@ -126,12 +127,75 @@ a recipe roda, a referência é descartada em silêncio e o ativo chega ao catá
 sem o vínculo — nenhuma task falha, nada aparece no log.
 
 Depois vem `postgres_metadata`, que cria as tabelas; depois `dbt_metadata`, que
-anexa descrição e linhagem; profiler e classifier por último, porque só têm o
-que medir depois disso.
+roda `dbt test` e anexa descrição, linhagem e o resultado de cada teste;
+profiler e classifier em seguida, porque só têm o que medir depois disso.
 
-O sync é idempotente e **não remove termo remoto**: ele aplica a hierarquia
-primeiro e as relações depois, quando todos os FQNs já existem. Editar
-`glossaries/minc.csv` e rodar a DAG basta.
+A task de glossário só **cria** o termo que falta. Atualizar o texto de um
+termo que já existe e aplicar as relações tipadas entre termos é trabalho da
+`reaplicar_governanca`, no fim da corrente: o `PUT` de termo só aceita relação
+genérica, e repetido a cada execução apagaria o tipo de relação que o `PATCH`
+acabou de pôr. Editar `glossaries/minc.csv` e rodar a DAG continua bastando.
+
+Por último, e sempre:
+
+```text
+reaplicar_governanca    (trigger_rule=all_done)
+  -> postgres_testsuite   executa os testes nativos que a governança criou
+  -> classificar_incidentes   severidade pelo tier da tabela
+```
+
+`all_done` porque o conector dbt apaga a certificação das tabelas a cada
+execução, e é esta task que a devolve. Presa a `all_success`, uma falha em
+qualquer recipe deixaria o catálogo sem certificação até a próxima execução boa.
+
+## Governança declarativa
+
+O que o conector não expressa mora em [`dbt/minc/governance/`](../../dbt/minc/governance/)
+e é aplicado pelo pacote [`governanca/`](governanca/):
+
+| Arquivo | Declara |
+|---|---|
+| `dominios.yml` | domínios, os seis produtos de dados (por pasta dbt e source), camada por ativo, tier, certificação e permissão de uso por camada, classificações e propriedades customizadas |
+| `servicos.yml` | descrição, dono e domínio do serviço, do database e do `MinC - Airflow` |
+| `schemas.yml` | descrição de cada schema e a política de publicação no RAG |
+| `formatos.yml` | como o dado está escrito na coluna (CPF só com dígitos ou como na origem, código IBGE de 6 ou 7 dígitos, valor em reais…), aplicado em massa por regra de nome e tipo |
+| `termos_minc.yml` | relações tipadas entre termos do glossário (o Explorador de Ontologia), e a que tabelas e colunas cada termo se aplica |
+| `metricas.yml` | a que termo do glossário responde cada métrica do MetricFlow |
+| `qualidade.yml` | testes nativos, suíte de execução, suítes por produto e severidade dos incidentes |
+| `contratos.yml` | termos de uso dos contratos das tabelas Gold |
+
+**Nada é criado pela interface.** O YAML é a fonte; quem editar na tela perde a
+alteração no próximo sync. A exceção é o que não é nosso: etiqueta PII do
+classifier, termo pendurado à mão e propriedade de outro órgão são preservados.
+
+**Fail-closed.** Modelo ou source sem produto, sem camada, ou com domínio que
+contradiz o do produto, não é catalogado com default — vira erro, e
+`tests/test_governanca_openmetadata.py` reprova. Tabela nova não sai
+certificada como Gold porque ninguém escreveu nada sobre ela.
+
+**Três modos**, pelo que houver no ambiente:
+
+```bash
+make openmetadata                                   # sem credencial: offline
+make openmetadata                                   # com OM_HOST e token: simulação, só lê
+make openmetadata OPENMETADATA_ARGS=--confirmar     # escreve
+make governance-audit-om                            # o que está na instância × o declarado
+```
+
+O database é o `DB_DW_DBNAME`, o mesmo das recipes. **Não defina
+`OM_DATABASE=minc`**: é o database antigo, parado desde setembro de 2026, e até
+2026-10 o `local.env` o trazia por padrão.
+
+**Testes: duas fontes que não competem.** Os do dbt rodam por `dbt test` antes
+do conector dbt (sem a bronze do SALIC, que leria 157 M de linhas — ver
+`OM_DBT_TEST_EXCLUDE`). Os nativos, declarados em `qualidade.yml`, conferem o
+que o dbt não expressa bem: o formato declarado da coluna, a tabela de consumo
+vazia, a coluna que entrou ou saiu sem o `schema.yml` acompanhar. A suíte que a
+recipe executa (`minc_testes_nativos`) contém só nativos: um teste do dbt
+dentro dela seria executado pelo OpenMetadata, que não sabe rodá-lo.
+
+**Linhagem de coluna** vem do conector dbt, que lê o SQL compilado. Não há um
+segundo writer de linhagem: a auditoria mede a cobertura.
 
 ## Não conectado
 
@@ -153,6 +217,9 @@ que está descrito acima.
 | `OM_INGEST_CLASSIFIER` | `true` | acha PII **sem** persistir amostra (`storeSampleData: false`) |
 | `OM_INGEST_PROFILER` | `false` | publica min, max e distribuição — estatística reveladora num banco com CPF, CNPJ e dados de raça e deficiência. Ligue só depois de verificar as exclusões de coluna sensível |
 | `OM_INGEST_SUPERSET` | `false` | o MinC não tem instância própria |
+| `OM_SYNC_GOVERNANCA` | `true` | aplica `dbt/minc/governance/` depois das recipes e devolve a certificação que o conector dbt apaga |
+| `OM_INGEST_TESTSUITE` | `true` | executa os testes nativos. Só existe com a governança ligada, que é quem cria os casos de teste |
+| `OM_DBT_RUN_TESTS` | `true` | roda `dbt test` para o resultado chegar ao catálogo e abrir incidente. O recorte padrão exclui a bronze do SALIC; mude com `OM_DBT_TEST_EXCLUDE` |
 
 Flag declarada no `config.py` precisa aparecer na `environment:` do
 `docker-compose.yml`, senão ela é lida no parse **dentro do container**, não

@@ -1,0 +1,137 @@
+version: 1
+
+# Ontologia do glossário MinC: como os termos se relacionam e onde se aplicam.
+#
+# Os TERMOS em si continuam em `helpers/openmetadata/glossaries/minc.csv` — uma
+# fonte só para o conteúdo do glossário, como já era. Este arquivo declara o
+# que o CSV não sabe dizer:
+#
+#   relacoes          aresta tipada entre dois termos (o Explorador de Ontologia
+#                     desenha uma por linha, com a cor do tipo)
+#   aplica_a          a que modelos/sources o termo se aplica inteiro
+#   aplica_a_colunas  a que COLUNAS, por nome — o conceito "Código IBGE"
+#                     pertence à coluna que o carrega, e ela se repete em
+#                     dezenas de tabelas. É a operação em massa de coluna,
+#                     declarada aqui em vez de feita na tela.
+#
+# Por que as relações saíram do CSV: o `PUT` de termo só aceita relação
+# genérica (`relatedTo`), e a cada execução da DAG ele apagaria o tipo que o
+# `PATCH` acabou de pôr. Tipo de relação exige `PATCH /relatedTerms` com
+# `TermRelation`, que é o que `sincronizar_governanca.py` faz.
+#
+# Tipos disponíveis (padrão do OpenMetadata 1.13, `SettingsCache.java`):
+#   relatedTo, seeAlso, synonym, antonym          simétricos
+#   broader <-> narrower, partOf <-> hasPart       hierárquicos, com inverso
+#   calculatedFrom <-> usedToCalculate             associativos, com inverso
+# A relação é declarada num sentido só; o sync aplica o inverso no outro termo.
+# Tipo novo exige papel de administrador (Settings > Glossary Term Relations) e
+# não é criado por este repositório.
+
+glossario:
+  name: MinC
+  owner_key: minc_data_engineering
+  #: Vazio de propósito, como os `experts` dos produtos: revisor é pessoa, e
+  #: nomear pessoa é decisão do time. Use o `name` do usuário no OpenMetadata.
+  revisores: []
+
+relacoes:
+  # ── Políticas: o que é cada mecanismo e de onde vem o recurso
+  - {de: MinC.Politicas.Rouanet, tipo: partOf, para: MinC.Politicas}
+  - {de: MinC.Politicas.LPG, tipo: partOf, para: MinC.Politicas}
+  - {de: MinC.Politicas.PNAB, tipo: partOf, para: MinC.Politicas}
+  - {de: MinC.Politicas.FundoAFundo, tipo: seeAlso, para: MinC.Politicas.PNAB}
+  - {de: MinC.Politicas.FundoAFundo, tipo: seeAlso, para: MinC.Politicas.LPG}
+  - {de: MinC.Politicas.PNAB, tipo: seeAlso, para: MinC.Politicas.LPG}
+
+  # ── Agentes: quem é quem no fomento
+  # Só `broader` onde o glossário diz que um conjunto contém o outro. Um
+  # proponente pode representar vários agentes, então não é subconjunto deles.
+  - {de: MinC.Agentes.Proponente, tipo: relatedTo, para: MinC.Agentes.AgenteCultural}
+  - {de: MinC.Agentes.AgenteColetivo, tipo: broader, para: MinC.Agentes.AgenteCultural}
+  - {de: MinC.Agentes.Contemplado, tipo: broader, para: MinC.Agentes.Proponente}
+  - {de: MinC.Agentes.PrimeiroAcesso, tipo: relatedTo, para: MinC.Agentes.Contemplado}
+  - {de: MinC.Agentes.Proponente, tipo: relatedTo, para: MinC.Identificadores.IdentificadorUnico}
+
+  # ── Cotas: o que cada reserva mede e o que limita o número
+  # As reservas existem na PNAB e na LPG; a hierarquia sob `MinC.Cotas` já diz
+  # que são cotas. Aqui fica só de onde cada percentual é calculado.
+  - {de: MinC.Cotas.CotaRacial, tipo: calculatedFrom, para: MinC.Qualificadores.RacaNormalizada}
+  - {de: MinC.Cotas.CotaIndigena, tipo: calculatedFrom, para: MinC.Qualificadores.RacaNormalizada}
+  - {de: MinC.Cotas.ValorPonderado, tipo: calculatedFrom, para: MinC.Qualificadores.CoberturaDePerfil}
+  - {de: MinC.Cotas.TerritorioVulnerabilizado, tipo: calculatedFrom, para: MinC.Identificadores.FCU}
+  - {de: MinC.Identificadores.FCU, tipo: calculatedFrom, para: MinC.Identificadores.CodigoIBGE}
+
+  # ── Incentivo fiscal: o ciclo do projeto Rouanet
+  - {de: MinC.IncentivoFiscal.ProjetoCultural, tipo: partOf, para: MinC.Politicas.Rouanet}
+  - {de: MinC.IncentivoFiscal.CaptacaoEfetiva, tipo: partOf, para: MinC.IncentivoFiscal.ProjetoCultural}
+  - {de: MinC.IncentivoFiscal.ExecucaoFinanceira, tipo: partOf, para: MinC.IncentivoFiscal.ProjetoCultural}
+  - {de: MinC.IncentivoFiscal.LocalDeExecucao, tipo: partOf, para: MinC.IncentivoFiscal.ProjetoCultural}
+  - {de: MinC.Identificadores.PRONAC, tipo: relatedTo, para: MinC.IncentivoFiscal.ProjetoCultural}
+  - {de: MinC.IncentivoFiscal.LocalDeExecucao, tipo: seeAlso, para: MinC.Cotas.TerritorioVulnerabilizado}
+  # Captado, comprovado e pago são medidas diferentes do mesmo projeto. `seeAlso`,
+  # e não `synonym`: a aresta existe para quem procura uma achar a outra.
+  - {de: MinC.IncentivoFiscal.ExecucaoFinanceira, tipo: seeAlso, para: MinC.IncentivoFiscal.CaptacaoEfetiva}
+
+  # ── Repasse federativo
+  - {de: MinC.Identificadores.IdPlanoAcao, tipo: relatedTo, para: MinC.Politicas.FundoAFundo}
+
+  # ── Vínculos genéricos que já existiam na coluna `relatedTerms` do CSV, sem
+  # tipo. Ficam `relatedTo` até alguém que conhece o conceito decidir um tipo
+  # mais preciso; trocar por chute publicaria semântica que ninguém afirmou.
+  - {de: MinC.Agentes.AgenteColetivo, tipo: relatedTo, para: MinC.Agentes.Proponente}
+  - {de: MinC.Agentes.Contemplado, tipo: relatedTo, para: MinC.Qualificadores.CoberturaDePerfil}
+  - {de: MinC.Agentes.PrimeiroAcesso, tipo: relatedTo, para: MinC.Agentes.AgenteCultural}
+  - {de: MinC.Cotas.TerritorioVulnerabilizado, tipo: relatedTo, para: MinC.Politicas.PNAB}
+  - {de: MinC.Cotas.ValorPonderado, tipo: relatedTo, para: MinC.Cotas.CotaRacial}
+  - {de: MinC.Identificadores.PRONAC, tipo: relatedTo, para: MinC.Politicas.Rouanet}
+  - {de: MinC.IncentivoFiscal.CaptacaoEfetiva, tipo: relatedTo, para: MinC.Politicas.Rouanet}
+
+#: Termo -> modelos e sources (pelo nome dbt). Fica no nível da TABELA só o
+#: conceito que a tabela inteira representa; o que é de uma coluna vai em
+#: `aplica_a_colunas`.
+aplica_a:
+  MinC.Politicas.Rouanet:
+    - map_chave_projeto_rouanet
+    - dim_projeto_rouanet
+  MinC.IncentivoFiscal.ProjetoCultural:
+    - dim_projeto_rouanet
+  MinC.IncentivoFiscal.CaptacaoEfetiva:
+    - fct_captacao_rouanet
+  MinC.IncentivoFiscal.ExecucaoFinanceira:
+    - fct_pagamento_profissional_rouanet
+  MinC.IncentivoFiscal.LocalDeExecucao:
+    - brg_projeto_local_execucao
+  MinC.Agentes.PrimeiroAcesso:
+    - primeiro_acesso_agentes
+    - fct_evento_acesso_rouanet
+  MinC.Cotas.CotaRacial:
+    - distribuicao_cotas_lpg
+    - distribuicao_cotas_pnab
+  MinC.Qualificadores.CoberturaDePerfil:
+    - cobertura_pagamentos
+  MinC.Politicas.FundoAFundo:
+    - plano_acao_minc
+    - plano_acao_meta_minc
+
+#: Termo -> nomes de coluna. A regra vale em TODA tabela do MinC que tiver a
+#: coluna, inclusive as que ainda vão ser criadas — é o que torna a aplicação em
+#: massa sustentável. Nome de coluna que não existe em lugar nenhum reprova em
+#: `tests/test_governanca_openmetadata.py`.
+aplica_a_colunas:
+  MinC.Identificadores.IdentificadorUnico:
+    - identificador_unico
+    - beneficiario_documento
+  MinC.Identificadores.PRONAC:
+    - pronac
+    - nrpronac
+  MinC.Identificadores.CodigoIBGE:
+    - cod_ibge
+    # 6 dígitos, sem o verificador: o mesmo conceito em outro formato. O
+    # formato fica na etiqueta `FormatoMinC`, não no termo — ver formatos.yml.
+    - idmunicipioibge
+  MinC.Identificadores.IdPlanoAcao:
+    - id_plano_acao
+  MinC.Qualificadores.OrigemDoAno:
+    - origem_ano
+  MinC.Qualificadores.RacaNormalizada:
+    - raca_normalizada

@@ -1,0 +1,410 @@
+version: 1
+
+# Domínios, produtos de dados e catalogação do MinC, declarados aqui e
+# aplicados no OpenMetadata por `scripts/governance/sincronizar_governanca.py`.
+# Nada é criado pela interface: o que está neste arquivo é o que existe no
+# catálogo, e quem editar na tela perde a alteração no próximo sync.
+#
+# O produto de cada ativo sai do próprio projeto dbt — pasta do modelo e nome
+# da source, em `produtos[].selecao` —, e não de uma lista de tabelas escrita à
+# mão: o manifest não é versionado (ADR 0007), e uma lista de 1.400 ativos
+# envelheceria no primeiro modelo novo.
+#
+# A instância é compartilhada com outros órgãos. Por isso a hierarquia começa
+# no órgão (`Cultura`) e só depois desce para o mecanismo.
+
+dominios:
+  # Os cinco primeiros JÁ EXISTEM na instância, criados à mão em 2026-09. Ficam
+  # declarados aqui para o repositório assumir o que escreve neles. O nome de
+  # exibição é o mesmo que está lá: o bot de ingestão é proibido de alterá-lo
+  # (`IngestionBotRole`, regra `DisplayName-Deny`).
+  - name: Cultura
+    display_name: Cultura
+    domain_type: Aggregate
+    owner_key: minc_data_engineering
+    description: >
+      Dados produzidos e mantidos pelo Ministério da Cultura (MinC): fomento
+      direto, incentivo fiscal, repasse federativo e cadastro cultural.
+
+  - name: Fomento Direto
+    display_name: Fomento Direto
+    parent: Cultura
+    domain_type: Aggregate
+    owner_key: minc_data_engineering
+    description: >
+      Editais que repassam recurso diretamente ao agente cultural (Lei Paulo
+      Gustavo e PNAB). É onde vivem as obrigações legais de cota e o indicador
+      de primeiro acesso.
+
+  - name: Incentivo Fiscal
+    display_name: Incentivo Fiscal
+    parent: Cultura
+    domain_type: Aggregate
+    owner_key: minc_data_engineering
+    description: >
+      Lei Rouanet e o sistema SALIC: renúncia fiscal, com proponente, projeto,
+      captação junto a incentivador e execução financeira do projeto.
+
+  - name: Repasse Federativo
+    display_name: Repasse Federativo
+    parent: Cultura
+    domain_type: Aggregate
+    owner_key: minc_data_engineering
+    description: >
+      Recurso que vai ao ente federado, e não ao agente: plano de ação, meta
+      pactuada, dado bancário e execução pela conta específica no BB Ágil.
+
+  - name: Cadastro Cultural
+    display_name: Cadastro Cultural
+    parent: Cultura
+    domain_type: Aggregate
+    owner_key: minc_data_engineering
+    description: >
+      Base cadastral de agentes, espaços, projetos, eventos e oportunidades do
+      Mapas Culturais. Dá contexto aos mecanismos de fomento sem ser fomento.
+
+  # Não existia: os `schema.yml` de `bacen_bronze` e `ibge_sidra_bronze` já
+  # pediam `Cultura.Indicadores`, e o conector descartava o vínculo em silêncio
+  # porque o domínio não estava na instância.
+  - name: Indicadores
+    display_name: Indicadores
+    parent: Cultura
+    domain_type: Source-aligned
+    owner_key: minc_data_engineering
+    description: >
+      Séries e cadastros de instituições externas — IBGE e Banco Central —
+      usados como contexto, denominador ou deflator dos indicadores do MinC.
+      Não são mecanismo de fomento.
+
+#: Time, não pessoa: a responsabilidade é da equipe, e a rotatividade de pessoas
+#: não deve invalidar a titularidade do dado.
+proprietarios:
+  minc_data_engineering:
+    type: team
+    name: minc-data-engineering
+
+#: `selecao` diz que ativos pertencem ao produto:
+#:   pastas   prefixo do caminho do modelo em `dbt/minc/models/`
+#:   sources  `source_name` declarado nos `sources.yml`
+#:
+#: Todo modelo e toda source do projeto pertencem a exatamente um produto ou
+#: estão em `fora_de_produto`, com o motivo. `tests/test_governanca_openmetadata.py`
+#: falha se um ativo novo aparecer sem dono — é assim que o produto não envelhece.
+#:
+#: O domínio do produto precisa ser o mesmo que o `meta.openmetadata.domain` dos
+#: ativos dele. O OpenMetadata recusa vincular tabela a produto de outro domínio
+#: (regra `Data Product Domain Validation`), e um domínio diferente do declarado
+#: no dbt faria o conector e o sync brigarem a cada execução.
+#:
+#: `termos` liga o produto ao vocabulário do glossário que o descreve.
+#: `experts` são as PESSOAS que respondem pelo conteúdo, e ficam vazias de
+#: propósito: atribuir responsabilidade nominal é decisão do time, não de
+#: automação. Para preencher, use o `name` do usuário no OpenMetadata.
+produtos:
+  - name: cotas_e_territorios
+    display_name: Cotas e Territórios
+    domain: Cultura.Fomento Direto
+    owner_key: minc_data_engineering
+    meta: 3
+    termos:
+      - MinC.Cotas
+      - MinC.Qualificadores.CoberturaDePerfil
+      - MinC.Politicas.LPG
+      - MinC.Politicas.PNAB
+    selecao:
+      pastas: [cotas_dbt/]
+      sources: [relatorio_gestao]
+    description: >
+      Se a reserva legal de recursos para pessoas negras, indígenas, com
+      deficiência e — na Lei Paulo Gustavo — de territórios vulnerabilizados
+      foi cumprida. Parte do pagamento ao agente, não do proponente, e mede a
+      cobertura de perfil que limita a confiança de cada percentual.
+
+  - name: primeiro_acesso
+    display_name: Primeiro Acesso
+    domain: Cultura.Fomento Direto
+    owner_key: minc_data_engineering
+    meta: 5
+    termos:
+      - MinC.Agentes.PrimeiroAcesso
+      - MinC.Agentes.Proponente
+      - MinC.Identificadores.IdentificadorUnico
+    selecao:
+      pastas: [agentes_dbt/]
+      # As fontes que o Primeiro Acesso lê do SALIC legado e da Ancine são de
+      # Incentivo Fiscal, não de Fomento Direto: ficam no produto do domínio
+      # delas, e a linhagem mostra o cruzamento.
+      sources: []
+    description: >
+      Quantos dos contemplados nunca haviam acessado fomento federal à cultura
+      antes. Consolida os proponentes de LPG, PNAB, Lei Aldir Blanc, Rouanet e
+      audiovisual num cadastro único por documento e classifica cada um pelo
+      histórico de acesso.
+
+  - name: incentivo_fiscal_rouanet
+    display_name: Incentivo Fiscal (Rouanet)
+    domain: Cultura.Incentivo Fiscal
+    owner_key: minc_data_engineering
+    termos:
+      - MinC.Politicas.Rouanet
+      - MinC.IncentivoFiscal
+      - MinC.Identificadores.PRONAC
+    selecao:
+      pastas: [salic_dbt/]
+      sources:
+        - bronze_agentes
+        - bronze_bdcorporativo
+        - bronze_controledeacesso
+        - bronze_sac
+        - bronze_tabelas
+        - bronze_sac_legado
+        - dados_salic
+    description: >
+      Projetos culturais da Lei Rouanet a partir do SALIC: proposta, aprovação,
+      captação junto a incentivador, execução financeira e local de realização,
+      identificados pelo PRONAC. A bronze espelha as tabelas do SALIC com tipo e
+      descrição; as silvers conformam o projeto e o evento de acesso.
+
+  - name: execucao_federativa
+    display_name: Execução Federativa
+    domain: Cultura.Repasse Federativo
+    owner_key: minc_data_engineering
+    meta: 2
+    termos:
+      - MinC.Politicas.FundoAFundo
+      - MinC.Identificadores.IdPlanoAcao
+    selecao:
+      pastas: [transferegov_bronze/, bbagil_bronze/]
+      sources: [transferegov, bbagil, bb_agil, bsc, execucao_pnab]
+    description: >
+      Quanto foi repassado do fundo nacional ao fundo de cada ente federado e o
+      que saiu da conta específica: plano de ação e metas no TransfereGov,
+      extrato e subtransações no BB Ágil. O repasse ao ente não é o pagamento
+      ao agente — são duas perguntas, e confundi-las é o erro mais caro.
+
+  - name: mapas_culturais
+    display_name: Mapas Culturais
+    domain: Cultura.Cadastro Cultural
+    owner_key: minc_data_engineering
+    termos:
+      - MinC.Agentes.AgenteCultural
+    selecao:
+      pastas: [mapas/]
+      sources: [mapas, dados_mapa_cultura]
+    description: >
+      Cadastro do Mapas Culturais: agentes, espaços, projetos, eventos,
+      oportunidades e inscrições, com a cópia fiel da origem e a silver tipada
+      e deduplicada que serve a análise exploratória e ao aprendizado de
+      máquina via Trino.
+
+  - name: indicadores_externos
+    display_name: Indicadores Externos
+    domain: Cultura.Indicadores
+    owner_key: minc_data_engineering
+    termos:
+      - MinC.Identificadores.CodigoIBGE
+    selecao:
+      pastas: [ibge_sidra_bronze/, bacen_bronze/]
+      sources: [ibge_sidra, bacen]
+    description: >
+      Séries do Banco Central (SGS) e metadados de pesquisas do IBGE (SIDRA)
+      usados como deflator, denominador territorial e contexto dos indicadores
+      do MinC.
+
+#: Ativos que não são produto: existem para o pipeline funcionar. Entram no
+#: catálogo com dono, domínio e permissão de uso, mas sem produto de dados.
+fora_de_produto:
+  - pasta: metadata
+    domain: Cultura.Fomento Direto
+    motivo: Metadados de execução do próprio pipeline (origem e carga de cada registro).
+  - source: ancine
+    domain: Cultura.Incentivo Fiscal
+    motivo: >-
+      Captação do audiovisual registrada pela Ancine, lida só pelo Primeiro
+      Acesso. Não é Rouanet, e o audiovisual ainda não tem produto próprio.
+  - pasta: metricflow_time_spine.sql
+    domain: Cultura.Fomento Direto
+    motivo: Dimensão de tempo exigida pelo MetricFlow; não responde pergunta de política.
+
+#: Camada de cada modelo. A camada do SCHEMA não basta: `salic` guarda bronze e
+#: silver juntas, e usar a do schema daria Tier1 às 589 views de cast.
+#:
+#: Ordem de resolução, a primeira que casar vale:
+#:   1. prefixo do ARQUIVO, a convenção do ADR 0010 (`bronze_`, `silver_`, `int_`)
+#:   2. `camada_por_pasta`, o legado que ainda organiza camada por subpasta
+#: Modelo que não casa com nenhuma é erro, não default — ver `fail-closed` em
+#: helpers/openmetadata/governanca/catalogo.py. Source é sempre `raw`.
+camada_por_prefixo_de_arquivo:
+  bronze_: bronze
+  silver_: silver
+  int_: intermediate
+
+camada_por_pasta:
+  agentes_dbt/bronze: bronze
+  agentes_dbt/silver: silver
+  agentes_dbt/gold: gold
+  cotas_dbt/bronze: bronze
+  cotas_dbt/silver: silver
+  cotas_dbt/gold: gold
+  salic_dbt/bronze: bronze
+  # As silvers do SALIC ficaram em subpastas por meta antes do ADR 0010. São
+  # silver conformada — ver HANDOFF.md —, não gold: nenhuma é consumo oficial.
+  salic_dbt/core: silver
+  salic_dbt/meta3: silver
+  salic_dbt/meta4: silver
+  salic_dbt/meta5: silver
+  transferegov_bronze: bronze
+  bbagil_bronze: bronze
+  ibge_sidra_bronze: bronze
+  bacen_bronze: bronze
+  metadata: technical
+  metricflow_time_spine.sql: technical
+
+#: Tier mede criticidade para o negócio: quem pode depender daquilo. Segue a
+#: camada para não virar avaliação subjetiva caso a caso. Quando o `schema.yml`
+#: declara `meta.openmetadata.tier`, o declarado vence — o conector dbt aplica o
+#: mesmo valor, e os dois nunca brigam.
+tier_por_camada:
+  gold: Tier1
+  silver: Tier2
+  intermediate: Tier2
+  bronze: Tier3
+  raw: Tier4
+  technical: Tier3
+
+#: Certificação de curadoria: o nível de tratamento a que o ativo foi
+#: submetido. É campo próprio da entidade (`/certification`), não etiqueta —
+#: enviada junto das etiquetas, o OpenMetadata a descarta com 200 e nenhum erro.
+#: `raw` e `technical` não recebem: não passaram por curadoria nenhuma.
+certificacao_por_camada:
+  gold: Certification.Gold
+  silver: Certification.Silver
+  intermediate: Certification.Silver
+  bronze: Certification.Bronze
+
+#: Permissão de uso: se o ativo pode ser consumido. É diferente da
+#: certificação. A bronze e o raw são publicados de propósito — sem eles a
+#: linhagem começa no meio do caminho —, mas entram marcados como não
+#: consumíveis: importantes de ver, proibidos de usar.
+#:
+#: A classificação `Uso` já existe na instância e é COMPARTILHADA com outros
+#: órgãos: usamos as três etiquetas dela e nunca a alteramos.
+permissao_de_uso_por_camada:
+  raw: Uso.NaoConsumivel
+  bronze: Uso.NaoConsumivel
+  silver: Uso.ApoioInterno
+  intermediate: Uso.ApoioInterno
+  gold: Uso.Consumivel
+  technical: Uso.ApoioInterno
+
+#: Etiquetas aplicadas a todo ativo, derivadas do que já está declarado aqui.
+#: `dbtTags` é a classificação que o conector dbt cria e é compartilhada com os
+#: outros órgãos; só acrescentamos as etiquetas que faltam.
+etiquetas_automaticas:
+  organizacao: dbtTags.minc
+  por_produto:
+    cotas_e_territorios: dbtTags.cotas
+    primeiro_acesso: dbtTags.primeiro_acesso
+    incentivo_fiscal_rouanet: dbtTags.rouanet
+    execucao_federativa: dbtTags.transferegov
+    mapas_culturais: dbtTags.mapas
+    indicadores_externos: dbtTags.indicadores
+  por_camada:
+    raw: dbtTags.raw
+    bronze: dbtTags.bronze
+    silver: dbtTags.silver
+    intermediate: dbtTags.intermediate
+    gold: dbtTags.gold
+
+#: Classificações que a catalogação usa. Precisam existir ANTES de serem
+#: penduradas: o OpenMetadata recusa etiqueta inexistente tabela a tabela.
+classificacoes:
+  - name: Uso
+    #: Compartilhada com outros órgãos. Conferida, nunca alterada.
+    compartilhada: true
+    mutuamente_exclusivas: true
+
+  - name: dbtTags
+    #: Do conector dbt, dividida com outros órgãos. Só criamos o que falta.
+    compartilhada: true
+    mutuamente_exclusivas: false
+    etiquetas:
+      - name: minc
+        display_name: MinC
+        description: Ativo produzido e mantido pelo Ministério da Cultura.
+      - name: primeiro_acesso
+        description: Ativo do produto de dados Primeiro Acesso (Meta 5).
+      - name: mapas
+        description: Ativo do produto de dados Mapas Culturais.
+      - name: indicadores
+        description: Ativo do produto de dados Indicadores Externos.
+      - name: raw
+        description: Tabela de origem, gravada pela ingestão e declarada como source no dbt.
+      - name: intermediate
+        description: Ativo da camada que cruza fontes e concentra transformação reutilizável.
+
+  #: Como o dado está escrito na coluna. É o que responde "o CPF vem com ou
+  #: sem pontuação?" sem abrir a tabela. Nome próprio do MinC, e não `Formato`,
+  #: porque a classificação é GLOBAL na instância compartilhada.
+  #:
+  #: As etiquetas e as regras que as aplicam estão em `formatos.yml`; esta
+  #: entrada só declara a classificação.
+  - name: FormatoMinC
+    display_name: Formato do dado (MinC)
+    mutuamente_exclusivas: true
+    description: >
+      Representação do valor na coluna — pontuação, máscara, unidade,
+      precisão e padrão — tal como o dado é disponibilizado. Uma coluna tem
+      um formato só. Cada formato que declara um padrão é conferido por um
+      teste do OpenMetadata.
+
+#: Nativas do OpenMetadata, conferidas e nunca alteradas.
+classificacoes_nativas:
+  - Tier
+  - Certification
+  - PII
+  - PersonalData
+
+#: Propriedades customizadas. O tipo de entidade é GLOBAL na instância: uma
+#: propriedade criada em `table` aparece para todos os órgãos. Por isso o
+#: prefixo `minc`. As três de `table` JÁ EXISTEM na instância; ficam aqui para o
+#: repositório assumir o que escreve nelas. O sync não recria o que existe.
+propriedades_customizadas:
+  - name: mincRelatedTables
+    entidade: table
+    tipo: entityReferenceList
+    description: >
+      Atalhos navegáveis para as tabelas vizinhas no grafo do dbt: de onde esta
+      tabela lê e quem lê dela.
+
+  - name: mincSemanticRelationships
+    entidade: table
+    tipo: markdown
+    description: >
+      Camada, grão, chaves e vizinhança da tabela, para responder com o que ela
+      pode ser cruzada. Auxílio de descoberta: não cria chave estrangeira nem
+      aresta de linhagem.
+
+  - name: mincTableGrain
+    entidade: table
+    tipo: string
+    description: O que uma linha da tabela representa.
+
+  - name: mincCamada
+    entidade: table
+    tipo: string
+    description: >
+      Camada do Data Lakehouse a que o ativo pertence (raw, bronze, silver,
+      intermediate, gold ou technical), conforme o ADR 0010.
+
+  - name: mincModeloDbt
+    entidade: table
+    tipo: string
+    description: >
+      Caminho do arquivo dbt que produz esta tabela, ou do `sources.yml` que a
+      declara. Responde onde se corrige o que está errado.
+
+  - name: mincMetas
+    entidade: dataProduct
+    tipo: string
+    description: Meta do acompanhamento PNAB/LPG a que o produto responde.

@@ -1,0 +1,205 @@
+version: 1
+
+# Registro semântico dos schemas físicos. É a ÚNICA fonte de descrição de
+# schema no catálogo: a auditoria falha se um schema que o projeto dbt toca não
+# tiver entrada aqui, em vez de o sync inventar uma descrição.
+#
+# `layer` é a camada predominante, usada só para etiquetar o PRÓPRIO schema.
+# As tabelas recebem a camada delas, resolvida modelo a modelo em
+# `dominios.yml` — `salic` guarda bronze e silver juntas, e é `mixed`.
+#
+# `rag_publication` é a política de publicação no RAG: `prohibited` |
+# `eligible_after_security_validation` | `determined_per_model`. Existe porque
+# o banco tem CPF, CNPJ, raça e deficiência. O catálogo publica existência e
+# topologia de tudo;
+# o conteúdo só sai para o RAG por allowlist, nunca por default.
+#
+# Não contém caminhos, SQL, contagens ou exemplos de dados.
+
+schemas:
+  # ── Origens (raw): gravadas pelas DAGs de ingestão, declaradas como source
+  - name: salic_bronze
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Cópia fiel das tabelas do SALIC (SAC, Agentes, Tabelas, BDCorporativo e
+      ControleDeAcesso), gravada pela ingestão via Trino em fatias. Tudo chega
+      como texto; o tipo é aplicado na bronze, no schema `salic`.
+
+  - name: bronze
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Tabelas legadas da primeira ingestão do SALIC, anteriores ao
+      `salic_bronze`. Mantidas porque o Primeiro Acesso ainda lê três delas.
+
+  - name: dados_salic
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Extrações do SALIC feitas antes da ingestão por Trino, sem consumidor no
+      projeto dbt. Publicadas para rastreabilidade.
+
+  - name: transferegov
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Respostas das APIs do TransfereGov (fundo a fundo e emendas) para os
+      planos de ação do MinC: programa, plano, meta, dado bancário, relatório
+      de gestão e anexos.
+
+  - name: bbagil
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Extrato e subtransações das contas específicas dos entes federados no
+      BB Ágil, com o controle de extração de cada consulta.
+
+  - name: bb_agil
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Primeira versão da extração do BB Ágil, substituída pelo schema `bbagil`.
+      Sem consumidor no projeto dbt.
+
+  - name: bsc
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Consultas ao BSC/SERPRO sobre a execução da PNAB.
+
+  - name: execucao_pnab
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Execução financeira da PNAB por ente federado, extraída antes da
+      integração com o TransfereGov.
+
+  - name: relatorio_gestao
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Planilhas de relatório de gestão da LPG e da PNAB enviadas pelos entes:
+      contemplados, pagamentos e perfil declarado do agente. Contém CPF, CNPJ,
+      raça e deficiência.
+
+  - name: ancine
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Projetos e captação do audiovisual registrados pela Ancine.
+
+  - name: mapas
+    layer: mixed
+    owner_key: minc_data_engineering
+    rag_publication: determined_per_model
+    description: >-
+      Mapas Culturais na estrutura do ADR 0010: a cópia crua `bronze_*` que a
+      ingestão grava e a silver tipada `silver_*` que o dbt produz, no mesmo
+      schema. A camada se lê no prefixo do nome.
+
+  - name: dados_mapa_cultura
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Extração antiga do Mapas Culturais, anterior ao schema `mapas`. Sem
+      consumidor no projeto dbt.
+
+  - name: ibge_sidra
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Catálogo de pesquisas, agregados, períodos e localidades da API SIDRA do
+      IBGE.
+
+  - name: bacen
+    layer: raw
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Séries do Sistema Gerenciador de Séries Temporais (SGS) do Banco Central.
+
+  # ── Bronze tipada: um modelo por tabela de origem, só com cast
+  - name: salic
+    layer: mixed
+    owner_key: minc_data_engineering
+    rag_publication: determined_per_model
+    description: >-
+      Lei Rouanet. Guarda a bronze tipada do SALIC — uma view por tabela de
+      `salic_bronze`, só com cast e descrição — e as silvers conformadas de
+      projeto, captação, pagamento, local de execução e evento de acesso.
+
+  - name: transferegov_bronze
+    layer: bronze
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Bronze tipada do TransfereGov: as respostas da API com o tipo decidido
+      pelo padrão medido no dado.
+
+  - name: bbagil_bronze
+    layer: bronze
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Bronze tipada do BB Ágil: extrato, subtransações e controle de extração.
+
+  - name: ibge_sidra_bronze
+    layer: bronze
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Bronze tipada da API SIDRA do IBGE.
+
+  - name: bacen_bronze
+    layer: bronze
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Bronze tipada das séries SGS do Banco Central.
+
+  # ── Produtos (legado: camadas em subpasta, um schema por domínio)
+  - name: cotas
+    layer: mixed
+    owner_key: minc_data_engineering
+    rag_publication: determined_per_model
+    description: >-
+      Cotas e Territórios (Meta 3). Bronze que filtra e tipa os relatórios de
+      gestão, silver que normaliza perfil e território, e gold com a
+      distribuição por cota e a cobertura de perfil.
+
+  - name: agentes
+    layer: mixed
+    owner_key: minc_data_engineering
+    rag_publication: determined_per_model
+    description: >-
+      Primeiro Acesso (Meta 5). Cadastro único de proponentes por documento,
+      histórico de acesso a fomento e as coortes de conversão.
+
+  # ── Técnicos
+  - name: metadata
+    layer: technical
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Metadados de execução do próprio pipeline: de que arquivo e de que carga
+      veio cada registro.
+
+  - name: minc
+    layer: technical
+    owner_key: minc_data_engineering
+    rag_publication: prohibited
+    description: >-
+      Schema padrão do target dbt. Guarda só a dimensão de tempo do MetricFlow.

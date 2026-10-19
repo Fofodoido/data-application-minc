@@ -1,0 +1,62 @@
+version: 1
+
+# Serviços e database do MinC no OpenMetadata.
+#
+# Eles JÁ EXISTEM na instância: são criados pelas recipes de
+# `helpers/openmetadata/recipes/`, com a conexão. Este arquivo não os cria e
+# nunca toca em conexão — só preenche o que estava vazio: descrição, dono,
+# domínio e etiquetas. Medido em 2026-10-18: serviço `MinC` e database
+# `MinC.dbanalytics` sem descrição, dono nem domínio.
+#
+# Os nomes do serviço de banco e do database NÃO estão aqui: vêm de
+# `OM_SERVICE` e de `OM_DATABASE` (ou `DB_DW_DBNAME`), os mesmos que as recipes
+# e o `lineage.py` usam. Repetir o nome no YAML criaria uma segunda verdade que
+# sai de sincronia na primeira troca de instância. O YAML declara a semântica;
+# o ambiente diz a qual instância aplicá-la.
+#
+# Nenhum declara nome de exibição, de propósito: o bot de ingestão é proibido
+# de alterá-lo (`IngestionBotRole`, regra `DisplayName-Deny`).
+
+servico:
+  owner_key: minc_data_engineering
+  domain: Cultura
+  tags:
+    - dbtTags.minc
+  description: >
+    Data warehouse analítico do Ministério da Cultura. Reúne a cópia fiel das
+    origens institucionais — SALIC, TransfereGov, BB Ágil, Mapas Culturais,
+    relatórios de gestão, IBGE e Banco Central — e as camadas bronze, silver e
+    gold que acompanham as metas da PNAB e da Lei Paulo Gustavo.
+
+banco:
+  owner_key: minc_data_engineering
+  domain: Cultura
+  tags:
+    - dbtTags.minc
+  description: >
+    Base analítica dos produtos de dados do MinC. Cada origem ocupa o próprio
+    schema; a camada, a certificação e a permissão de uso de cada ativo
+    acompanham a camada em que ele está, e não o schema.
+
+# ── Orquestração (Airflow) ──────────────────────────────────────────────────
+#
+# Este serviço É nosso: o `MinC - Airflow` só contém DAGs deste repositório
+# (29 pipelines em 2026-10-18). Por isso recebe dono, domínio e etiqueta do
+# MinC, diferente do serviço `airflow` compartilhado da instância.
+orquestracao:
+  tipo: pipelineService
+  name: MinC - Airflow
+  owner_key: minc_data_engineering
+  domain: Cultura
+  tags:
+    - dbtTags.minc
+  description: >
+    Orquestração do pipeline de dados do MinC: uma DAG por endpoint de origem,
+    a DAG do projeto dbt e a DAG que mantém este catálogo em dia. A linhagem
+    entre cada DAG e as tabelas que ela grava é publicada pela própria DAG.
+
+# ── Consumo (Superset) ──────────────────────────────────────────────────────
+#
+# Fora de propósito: o MinC não tem instância de Superset própria (ver
+# `OM_INGEST_SUPERSET` no `docker-compose.yml`). Quando tiver, declare aqui
+# como `dashboardService`, no mesmo formato da orquestração.

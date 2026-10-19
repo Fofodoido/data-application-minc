@@ -15,7 +15,9 @@ export MYPYPATH := $(CURDIR):$(CURDIR)/dags:$(CURDIR)/helpers:$(CURDIR)/plugins
 
 .PHONY: setup lock dbt-manifest format lint lint-ci test compose-config \
         up up-trino down logs-airflow logs-trino trino-cli \
-        docs-setup docs-collect docs-build docs-serve docs-clean
+        docs-setup docs-collect docs-build docs-serve docs-clean \
+        openmetadata openmetadata-governanca openmetadata-metricas \
+        openmetadata-qualidade governance-audit-om
 
 DOCS_DIR := docs-pages
 DOCS_VENV := $(DOCS_DIR)/.venv
@@ -106,3 +108,31 @@ docs-serve: docs-build
 
 docs-clean:
 	rm -rf $(DOCS_DIR)/site $(DOCS_VENV)
+
+# ── OpenMetadata: governança declarada em dbt/minc/governance/ ─────────────
+#
+# Sem OM_HOST e token no .env, roda offline e só relata o declarado. Com eles,
+# simula: lê a instância e mostra a diferença, sem escrever nada. Escreve só
+# com `OPENMETADATA_ARGS=--confirmar`. A DAG openmetadata_ingestion_dag aplica
+# o mesmo, sempre depois das recipes.
+#
+# A ordem importa: produto e domínio antes da tabela que entra neles; métrica
+# e teste depois da tabela de onde saem.
+OPENMETADATA_ARGS ?=
+OPENMETADATA_AUDIT ?=
+
+openmetadata-governanca:
+	poetry run python scripts/governance/sincronizar_governanca.py $(OPENMETADATA_ARGS)
+
+openmetadata-metricas:
+	poetry run python scripts/governance/sincronizar_metricas.py $(OPENMETADATA_ARGS)
+
+openmetadata-qualidade:
+	poetry run python scripts/governance/sincronizar_qualidade.py $(OPENMETADATA_ARGS)
+
+openmetadata: openmetadata-governanca openmetadata-metricas openmetadata-qualidade
+
+# Confere o que está NA INSTÂNCIA contra o que o repositório declara. Só lê.
+# `OPENMETADATA_AUDIT=--strict` sai com erro se houver pendência.
+governance-audit-om:
+	poetry run python scripts/governance/auditar_openmetadata.py $(OPENMETADATA_AUDIT)

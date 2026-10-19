@@ -2846,7 +2846,10 @@ sources:
           colunas.
         meta:
           openmetadata:
-            domain: Cultura.Audiovisual
+            # Era `Cultura.Audiovisual`, domínio que nunca existiu na instância:
+            # o conector descartava o vínculo em silêncio. A outra tabela da
+            # Ancine já declarava Incentivo Fiscal.
+            domain: Cultura.Incentivo Fiscal
             tier: Tier.Tier4
             owner: minc-data-engineering
         columns:

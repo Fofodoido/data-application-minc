@@ -28,7 +28,12 @@ from metadata.ingestion.source.pipeline.airflow.lineage_parser import OMEntity
 # Precisa casar com o serviceName/database das recipes de postgres e dbt, senao
 # a linhagem aponta para tabelas que nao existem no catalogo.
 OM_SERVICE = os.environ.get("OM_SERVICE", "MinC")
-OM_DATABASE = os.environ.get("OM_DATABASE", "minc")
+# O database das recipes e o DB_DW_DBNAME, entao ele vence. O default antigo,
+# `minc`, era o database parado: a linhagem das DAGs apontava para 647 tabelas
+# que ninguem mais atualiza, e o OpenMetadata aceitava sem erro.
+OM_DATABASE = (
+    os.environ.get("DB_DW_DBNAME") or os.environ.get("OM_DATABASE") or "dbanalytics"
+)
 
 # Serviço de pipeline onde as DAGs do MinC aparecem.
 OM_PIPELINE_SERVICE = os.environ.get("OM_PIPELINE_SERVICE", "MinC - Airflow")

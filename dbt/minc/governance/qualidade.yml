@@ -1,0 +1,102 @@
+version: 1
+
+# Qualidade e observabilidade no OpenMetadata, aplicadas por
+# `scripts/governance/sincronizar_qualidade.py`.
+#
+# Há duas fontes de teste, e elas não competem:
+#
+#   dbt          os 5.800 testes dos `schema.yml`. Rodam por `dbt test` dentro
+#                da `openmetadata_ingestion_dag` (flag `OM_DBT_RUN_TESTS`), e o
+#                conector dbt publica o resultado de cada um. Antes desta
+#                mudança só se rodava `dbt docs generate`: os casos de teste
+#                existiam no catálogo, todos sem resultado, e nenhum incidente
+#                podia abrir.
+#   nativos      os declarados aqui. Executados pelo próprio OpenMetadata
+#                (recipe `postgres_testsuite`), conferem o que o dbt não
+#                expressa bem: o FORMATO declarado em `formatos.yml`, a tabela
+#                que esvaziou e a coluna que sumiu ou apareceu sem documentação.
+#
+# Falha de qualquer um abre incidente no Incident Manager, com a severidade do
+# tier da tabela. O alerta fica só dentro do OpenMetadata — feed de atividade e
+# incidente —, decisão de 2026-10-18: sem e-mail nem webhook.
+
+#: Suíte lógica que a recipe `postgres_testsuite` EXECUTA. Contém só testes
+#: nativos: um caso de teste do dbt dentro dela seria executado pelo
+#: OpenMetadata, que não sabe rodar SQL de teste do dbt, e falharia sempre.
+suite_de_execucao:
+  name: minc_testes_nativos
+  display_name: MinC — testes nativos
+  description: >
+    Testes nativos do OpenMetadata sobre as tabelas do MinC, declarados em
+    `dbt/minc/governance/qualidade.yml` e `formatos.yml`. Executada pela
+    `openmetadata_ingestion_dag`; não edite pela interface.
+
+#: Uma suíte lógica por produto de dados, com TODOS os testes das tabelas do
+#: produto — dbt e nativos. Serve para OBSERVAR: é o recorte que a aba Data
+#: Quality mostra por produto. Não é executada; cada teste roda pela sua via.
+suites_por_produto:
+  prefixo: minc_
+  description: >
+    Todos os testes das tabelas do produto de dados, de dbt e nativos. Suíte
+    de observação: os testes rodam pelo dbt e pela suíte minc_testes_nativos.
+
+#: Formato vira teste só nestas camadas. Na raw e na bronze o teste de regex
+#: leria as 157 M de linhas do SALIC a cada execução para confirmar o que já
+#: está escrito na etiqueta: "como na origem".
+testes_de_formato:
+  camadas: [silver, intermediate, gold]
+  definicao: columnValuesToMatchRegex
+
+#: Testes de tabela aplicados por camada. `@colunas_documentadas` é resolvido
+#: para a lista de colunas que o `schema.yml` declara: o teste reprova quando a
+#: tabela ganha ou perde coluna sem o YAML acompanhar — o drift que hoje só
+#: aparece quando um painel quebra.
+testes_por_camada:
+  gold:
+    - name: minc_tem_linhas
+      definicao: tableRowCountToBeBetween
+      parametros: {minValue: 1}
+      description: A tabela de consumo não pode estar vazia.
+    - name: minc_colunas_documentadas
+      definicao: tableColumnToMatchSet
+      parametros: {columnNames: '@colunas_documentadas', ordered: false}
+      description: >
+        As colunas da tabela são exatamente as documentadas no schema.yml.
+  silver:
+    - name: minc_tem_linhas
+      definicao: tableRowCountToBeBetween
+      parametros: {minValue: 1}
+      description: A silver não pode estar vazia.
+
+#: Testes de uma tabela específica, além dos automáticos. `tabela` é o nome
+#: do modelo dbt. Use para regra de negócio que só vale ali.
+testes_declarados:
+  - tabela: fct_pagamentos_elegiveis
+    testes:
+      - name: minc_teto_valor_pago
+        definicao: columnValueMaxToBeBetween
+        coluna: valor_pago_num
+        parametros: {minValueForMaxInCol: 0, maxValueForMaxInCol: 10000000}
+        description: >
+          O teto de R$ 10 milhões por pagamento é aplicado na bronze; um valor
+          acima dele aqui significa que o teto deixou de ser aplicado.
+  - tabela: cobertura_pagamentos
+    testes:
+      - name: minc_ano_ou_sem_ano
+        definicao: columnValuesToMatchRegex
+        coluna: ano_final
+        parametros: {regex: '^([0-9]{4}|sem_ano)$'}
+        description: Todo bloco de cobertura é um ano ou o literal sem_ano.
+
+#: Severidade do incidente aberto por falha, pelo tier da tabela. Severity1 é a
+#: mais grave: tabela de consumo errada chega ao painel.
+incidentes:
+  severidade_por_tier:
+    Tier1: Severity1
+    Tier2: Severity2
+    Tier3: Severity3
+    Tier4: Severity4
+  #: Responsável é PESSOA no OpenMetadata (o incidente não aceita time). Fica
+  #: vazio até o time decidir quem: o incidente aparece sem responsável no
+  #: Incident Manager e no feed do time dono da tabela.
+  responsavel: null

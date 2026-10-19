@@ -14,7 +14,10 @@ from typing import Any, Callable
 
 import yaml
 
-VALID_METADATA_COMMANDS = {"ingest", "profile", "classify"}
+# `test` executa uma suite de testes nativos do OpenMetadata (recipe
+# `postgres_testsuite`). Vai pelo CLI: le a suite do servidor e grava o
+# resultado de cada caso, sem a paginacao de tabelas do profiler.
+VALID_METADATA_COMMANDS = {"ingest", "profile", "classify", "test"}
 TABLE_ENTITY_PAGE_SIZE = 20
 TABLE_WORKFLOW_SUCCESS_THRESHOLD = 100
 
