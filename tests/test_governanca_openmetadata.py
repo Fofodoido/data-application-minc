@@ -475,3 +475,26 @@ def test_escrita_que_nao_responde_vira_falha_e_o_sync_segue(
     assert not ok and len(om.falhas) == 1 and "ajustar x" in om.falhas[0]
     assert len(sessao.chamadas) == cliente.TENTATIVAS
     assert sessao.chamadas[0][2]["timeout"] == cliente.TEMPO_DE_ESCRITA
+
+
+@pytest.mark.parametrize(
+    "descricao",
+    [
+        "[NÃO VERIFICADO] Coluna ausente do dicionário de dados original.",
+        "[Inferido do nome, não verificado] Cadastro de bairros.",
+        "Código de situação (significado NÃO verificado).",
+        "[não documentado no dicionário de dados original do SALIC] Tipo original",
+    ],
+)
+def test_toda_forma_da_marca_conta_como_nao_verificada(descricao: str) -> None:
+    from openmetadata.governanca.governanca import nao_verificada
+
+    assert nao_verificada(_yaml("dominios.yml"), descricao)
+
+
+def test_descricao_confirmada_nao_conta_como_nao_verificada() -> None:
+    from openmetadata.governanca.governanca import nao_verificada
+
+    dominios = _yaml("dominios.yml")
+    assert not nao_verificada(dominios, "Provedor de autenticação verificado pelo login.")
+    assert not nao_verificada(dominios, None)
