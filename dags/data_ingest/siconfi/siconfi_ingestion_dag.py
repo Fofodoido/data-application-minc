@@ -38,6 +38,14 @@ do RREO no bimestre 6)::
 O recorte vale também para o que já está na fila: estreitá-lo para de buscar o
 que ficou de fora, sem apagar nada. Cada task de ingestão trabalha até
 ``max_run_minutes`` e devolve à fila o que não processou.
+
+Destino (ADR 0009 e 0011): cada página vai para o datalakehouse, em
+``raw/siconfi/<entidade>/`` como chegou e em ``staging/siconfi/<entidade>/``
+como Parquet de texto, uma pasta por run (ver ``siconfi_storage``). Nenhuma
+camada é gravada no Postgres; lá fica só o controle, em ``siconfi_control``.
+Cada task emite o Asset do staging da sua entidade com a pasta do run no
+``extra``, e é ele que dispara a ponte para ``siconfi.bronze_<entidade>``. Precisa
+da conexão ``minio_datalakehouse`` no Airflow.
 """
 
 from __future__ import annotations
@@ -47,19 +55,29 @@ import time
 from datetime import datetime, timedelta
 from typing import Any
 
-from airflow.sdk import Variable, dag, get_current_context, task
+from airflow.sdk import Variable, dag, task
 
+import datalakehouse
 from cliente_siconfi import (
     FACT_ENDPOINTS,
     PlanScope,
     SiconfiClient,
     SiconfiPermanentError,
     SiconfiRetryableError,
-    planned_units,
 )
 from postgres_helpers import get_postgres_conn
 from schedule_loader import get_dynamic_schedule
-from siconfi_storage import CLAIM_LEASE_MINUTES, SiconfiStorage
+from siconfi_storage import (
+    CLAIM_LEASE_MINUTES,
+    FONTE,
+    SiconfiStorage,
+    entidade,
+    entity_ids_do_raw,
+    persist_page,
+    plan_from_extrato,
+    prefixo_raw_do_run,
+    prefixo_staging_do_run,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +94,8 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     "max_work_units_per_run": 2000,
     "max_run_minutes": 45,
     "reference_refresh_hours": 168,
-    # Linhas do extrato lidas por execução do planejamento, a partir de onde
-    # a anterior parou.
+    # Itens do extrato lidos por execução do planejamento, sempre em arquivos
+    # inteiros do raw que ainda não foram planejados com o recorte atual.
     "max_manifest_rows_for_planning": 100000,
     "fact_endpoints": None,
     "rreo_periods": None,
@@ -93,8 +111,8 @@ _DEFAULT_CONFIG: dict[str, Any] = {
 _DEFAULT_ARGS = {"owner": "MinC", "retries": 2, "retry_delay": timedelta(minutes=10)}
 # Unidades de trabalho acumuladas antes de cada gravação em lote no planejamento.
 _PLAN_FLUSH_SIZE = 5000
-# Linhas do extrato lidas do banco de cada vez no planejamento.
-_PLAN_READ_BATCH = 10000
+# Tabelas de referência, atualizadas a cada ``reference_refresh_hours``.
+_REFERENCE_ENDPOINTS = ("anexos-relatorios", "entes")
 
 
 def _config() -> dict[str, Any]:
@@ -114,8 +132,21 @@ def _config() -> dict[str, Any]:
     return config
 
 
-def _run_id() -> str:
-    return str(get_current_context()["run_id"])
+def _run() -> tuple[str, datetime]:
+    """``run_id`` e a data que dá nome à pasta do run no datalakehouse."""
+    return datalakehouse.run_atual()
+
+
+def _asset(endpoint: str) -> Any:
+    return datalakehouse.asset_staging(FONTE, entidade(endpoint))
+
+
+def _publicar_run(endpoint: str, run_id: str, data: datetime) -> None:
+    """Avisa a ponte de que a pasta deste run, no staging, está completa."""
+    datalakehouse.publicar_cadeia(
+        _asset(endpoint),
+        {entidade(endpoint): prefixo_staging_do_run(endpoint, run_id, data)},
+    )
 
 
 def _storage(conn_str: str) -> SiconfiStorage:
@@ -125,31 +156,42 @@ def _storage(conn_str: str) -> SiconfiStorage:
 
 
 def _refresh_reference(
-    conn_str: str, config: dict[str, Any], run_id: str
-) -> dict[str, int]:
+    conn_str: str, config: dict[str, Any], run_id: str, data: datetime
+) -> dict[str, int | None]:
+    """Itens gravados por tabela de referência; ``None`` quando não venceu."""
     storage = _storage(conn_str)
     client = SiconfiClient(conn_str, page_limit=int(config["page_limit"]))
-    result: dict[str, int] = {}
+    result: dict[str, int | None] = {}
     try:
-        for endpoint in ("anexos-relatorios", "entes"):
+        for endpoint in _REFERENCE_ENDPOINTS:
             if not storage.reference_due(
                 endpoint, int(config["reference_refresh_hours"])
             ):
-                result[endpoint] = 0
+                result[endpoint] = None
                 continue
             result[endpoint] = sum(
-                storage.persist_page(page, run_id)
+                persist_page(page, run_id, data)
                 for page in client.iter_pages(endpoint, {})
             )
-            storage.mark_reference_refreshed(endpoint)
+            # Só depois da última página: o planejamento lê os entes desta
+            # pasta, e uma pasta pela metade deixaria entes de fora.
+            storage.mark_reference_refreshed(
+                endpoint, prefixo_raw_do_run(endpoint, run_id, data)
+            )
     finally:
         client.close()
     return result
 
 
+def _entity_ids(storage: SiconfiStorage, config: dict[str, Any]) -> list[int]:
+    return [int(value) for value in config["entity_ids"]] or entity_ids_do_raw(
+        storage.reference_prefix("entes")
+    )
+
+
 def _plan_extrato(conn_str: str, config: dict[str, Any]) -> int:
     storage = _storage(conn_str)
-    entity_ids = [int(value) for value in config["entity_ids"]] or storage.entity_ids()
+    entity_ids = _entity_ids(storage, config)
     if not entity_ids:
         raise ValueError(
             "Nenhum ente disponível; aguarde a carga de /entes " "ou configure entity_ids"
@@ -173,7 +215,7 @@ def _plan_dca(storage: SiconfiStorage, scope: PlanScope, config: dict[str, Any])
     """Enfileira a DCA por ente e exercício, sem consultar o extrato."""
     if not scope.enabled("dca"):
         return 0
-    entity_ids = [int(value) for value in config["entity_ids"]] or storage.entity_ids()
+    entity_ids = _entity_ids(storage, config)
     if not entity_ids:
         raise ValueError(
             "Nenhum ente disponível; aguarde a carga de /entes ou configure entity_ids"
@@ -192,50 +234,19 @@ def _plan_dca(storage: SiconfiStorage, scope: PlanScope, config: dict[str, Any])
 def _plan_facts(conn_str: str, config: dict[str, Any]) -> dict[str, int]:
     scope = PlanScope.from_config(config)
     storage = _storage(conn_str)
-    created = {endpoint: 0 for endpoint in FACT_ENDPOINTS}
+    created = plan_from_extrato(
+        storage,
+        scope,
+        budget=int(config["max_manifest_rows_for_planning"]),
+        flush_size=_PLAN_FLUSH_SIZE,
+    )
     created["dca"] = _plan_dca(storage, scope, config)
-    # As unidades vão para o banco em lotes: um extrato nacional completo
-    # planeja centenas de milhares delas, e uma conexão por unidade fazia
-    # esta task nunca terminar contra um Postgres remoto.
-    buffers: dict[str, list[tuple[dict[str, Any], str | None]]] = {
-        endpoint: [] for endpoint in FACT_ENDPOINTS
-    }
-
-    def flush(endpoint: str) -> None:
-        if buffers[endpoint]:
-            created[endpoint] += storage.enqueue_many(endpoint, buffers[endpoint])
-            buffers[endpoint].clear()
-
-    # O extrato é lido a partir de onde a execução anterior parou. Antes, só
-    # as 100 mil linhas mais recentes eram lidas, e num backfill nacional a
-    # maior parte do extrato nunca era planejada. Mudar o recorte zera a marca
-    # e relê tudo.
-    fingerprint = scope.fingerprint()
-    after = storage.plan_watermark("extrato_entregas", fingerprint)
-    budget = int(config["max_manifest_rows_for_planning"])
-    read = 0
-    while read < budget:
-        batch = storage.payloads_since(
-            "extrato_entregas", after, min(_PLAN_READ_BATCH, budget - read)
-        )
-        if not batch:
-            break
-        for _, item in batch:
-            for endpoint, params, revision in planned_units(item, scope):
-                buffers[endpoint].append((params, revision))
-                if len(buffers[endpoint]) >= _PLAN_FLUSH_SIZE:
-                    flush(endpoint)
-        for endpoint in FACT_ENDPOINTS:
-            flush(endpoint)
-        after = batch[-1][0]
-        storage.save_plan_watermark("extrato_entregas", after, fingerprint)
-        read += len(batch)
-    logger.info("[siconfi] %s linhas do extrato lidas; unidades novas: %s", read, created)
+    logger.info("[siconfi] unidades novas: %s", created)
     return created
 
 
 def _ingest_work(
-    endpoint: str, conn_str: str, config: dict[str, Any], run_id: str
+    endpoint: str, conn_str: str, config: dict[str, Any], run_id: str, data: datetime
 ) -> dict[str, int]:
     scope = PlanScope.from_config(config)
     summary = dict.fromkeys(
@@ -262,7 +273,7 @@ def _ingest_work(
                 break
             try:
                 rows = sum(
-                    storage.persist_page(page, run_id)
+                    persist_page(page, run_id, data)
                     for page in client.iter_pages(endpoint, unit["params"])
                 )
                 status, error = ("success" if rows else "no_data"), None
@@ -295,12 +306,17 @@ def _ingest_work(
     catchup=False,
     max_active_runs=1,
     default_args=_DEFAULT_ARGS,
-    tags=["minc", "siconfi", "tesouro", "raw", "bronze"],
+    tags=["minc", "siconfi", "tesouro", "datalakehouse", "raw"],
 )
 def siconfi_ingestion_dag() -> None:
-    @task
-    def refresh_reference_data() -> dict[str, int]:
-        return _refresh_reference(get_postgres_conn(), _config(), _run_id())
+    @task(outlets=[_asset(endpoint) for endpoint in _REFERENCE_ENDPOINTS])
+    def refresh_reference_data() -> dict[str, int | None]:
+        run_id, data = _run()
+        result = _refresh_reference(get_postgres_conn(), _config(), run_id, data)
+        for endpoint, rows in result.items():
+            if rows is not None:
+                _publicar_run(endpoint, run_id, data)
+        return result
 
     @task
     def plan_extrato() -> int:
@@ -312,17 +328,24 @@ def siconfi_ingestion_dag() -> None:
 
     @task
     def ingest(endpoint: str) -> dict[str, int]:
-        return _ingest_work(endpoint, get_postgres_conn(), _config(), _run_id())
+        run_id, data = _run()
+        summary = _ingest_work(endpoint, get_postgres_conn(), _config(), run_id, data)
+        _publicar_run(endpoint, run_id, data)
+        return summary
 
     planned_facts = plan_facts()
     (
         refresh_reference_data()
         >> plan_extrato()
-        >> ingest.override(task_id="ingest_extrato")("extrato_entregas")
+        >> ingest.override(
+            task_id="ingest_extrato", outlets=[_asset("extrato_entregas")]
+        )("extrato_entregas")
         >> planned_facts
     )
     for endpoint in FACT_ENDPOINTS:
-        planned_facts >> ingest.override(task_id=f"ingest_{endpoint}")(endpoint)
+        planned_facts >> ingest.override(
+            task_id=f"ingest_{endpoint}", outlets=[_asset(endpoint)]
+        )(endpoint)
 
 
 siconfi_ingestion_dag()
