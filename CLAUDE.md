@@ -4,10 +4,9 @@ Pipeline de dados do Ministério da Cultura no Gov Hub BR. Ingere dados de siste
 de governo (TransfereGov, BB Ágil, SALIC, FCU), transforma com dbt em Postgres e
 serve o acompanhamento das metas do PNAB e da Lei Paulo Gustavo.
 
-> **Trabalho em curso nas silvers do SALIC:** leia [`HANDOFF.md`](HANDOFF.md)
-> antes de mexer em `dbt/minc/models/salic_dbt/`. Ele diz o que está pronto, o
-> que está bloqueado e por quê — e o registro vivo, com protocolo de handoff
-> entre agentes, é [`docs/openmetadata/MEMORY.md`](docs/openmetadata/MEMORY.md).
+> **Trabalho em curso nas silvers do SALIC:** o registro vivo, com protocolo de
+> handoff entre agentes, é [`docs/openmetadata/MEMORY.md`](docs/openmetadata/MEMORY.md).
+> Leia antes de mexer em `dbt/minc/models/salic_dbt/`.
 
 ## Stack
 
@@ -24,7 +23,7 @@ As DAGs de API do TransfereGov gravam no datalakehouse (MinIO, `raw/` e
 |---|---|---|
 | `dags/data_ingest/` | uma DAG por endpoint de origem — 13 hoje | Sim |
 | `dags/dbt/minc_cosmos_dag.py` | a DAG que roda o projeto dbt inteiro | Raramente |
-| `dbt/minc/models/` | hoje organizado por domínio (`cotas_dbt`, `salic_dbt`, `*_bronze`); `mapas/`, `bbagil/`, `salic/`, `ancine/`, `relatorio_gestao/`, `intermediate/` e `cultura_em_numeros/` (a Meta 5) já seguem a estrutura aprovada; a estrutura aprovada é pasta por fonte e por produto, com as camadas no nome do arquivo — [ADR 0010](docs/adr/0010-camadas-e-schemas-do-data-lakehouse.md). Modelo novo segue o ADR; o legado migra aos poucos. Use a skill `arquitetura-lakehouse-minc` antes de criar ou mover modelo | Sim |
+| `dbt/minc/models/` | hoje organizado por domínio (`cotas_dbt`, `salic_dbt`, `*_bronze`); `mapas/`, `bbagil/`, `salic/`, `ancine/`, `transferegov/`, `intermediate/` e `data_products/cultura_em_numeros/` (a Meta 5) já seguem a estrutura aprovada; a estrutura aprovada é pasta por fonte e, dentro de `data_products/`, por produto, com as camadas no nome do arquivo — [ADR 0010](docs/adr/0010-camadas-e-schemas-do-data-lakehouse.md). Modelo novo segue o ADR; o legado migra aos poucos. Use a skill `arquitetura-lakehouse-minc` antes de criar ou mover modelo | Sim |
 | `dbt/minc/models/sources.yml` | declaração das tabelas de origem | Sim |
 | `dbt/minc/target/` | saída do `dbt run` e do `dbt docs generate` | **Não.** Gerada, e ignorada pelo git |
 | `plugins/` | clientes de API (`cliente_*.py`), autenticação e regras de negócio | Sim |
