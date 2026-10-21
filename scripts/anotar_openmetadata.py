@@ -67,6 +67,9 @@ DOMINIO_POR_PASTA = {
     "salic": INCENTIVO,
     "ancine": INCENTIVO,
     "transferegov": FOMENTO,
+    # mapas_dbt lê o Mapa da Cultura, que é cadastro (schema
+    # dados_mapa_cultura), não mecanismo de fomento
+    "mapas": CADASTRO,
     "intermediate": FOMENTO,
     "cultura_em_numeros": FOMENTO,
 }
