@@ -28,7 +28,8 @@
 -- Rouanet faz esse percurso sem ser novo entrante. Por isso a porta de
 -- entrada é dimensão desta tabela e não um detalhe: a resposta estrita da
 -- 2.3 são as linhas de DIRETO_DEPOIS_ROUANET com porta em LAB/LPG/PNAB. A
--- série com exposição controlada vive em conversao_direto_rouanet_coorte.
+-- série com exposição controlada vive em
+-- eixo2_meta5_conversao_direto_rouanet_coorte.
 
 WITH agentes AS (
     SELECT
@@ -39,7 +40,7 @@ WITH agentes AS (
         MIN(data_primeiro_acesso_mecanismo)
             FILTER (WHERE programa_fomento = 'ROUANET') AS entrada_rouanet,
         MAX(programa_fomento) FILTER (WHERE eh_porta_de_entrada) AS mecanismo_porta_entrada
-    FROM {{ ref('primeiro_acesso_agentes') }}
+    FROM {{ ref('int_bbagil_salic_ancine_primeiro_acesso') }}
     GROUP BY beneficiario_documento, tipo_pessoa
 ),
 

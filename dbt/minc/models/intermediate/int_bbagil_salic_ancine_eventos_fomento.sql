@@ -1,6 +1,6 @@
 {{ config(materialized='table') }}
 
--- Silver — espinha unificada da Meta 5: um evento por vez que um agente
+-- Intermediate — espinha unificada da Meta 5: um evento por vez que um agente
 -- cultural recebeu recurso de uma política federal de fomento, num formato
 -- só, vindo de fontes diferentes. É a tabela que permite responder "este
 -- agente já havia sido contemplado antes?" olhando ACIMA do mecanismo — que
@@ -44,7 +44,7 @@ WITH eventos_bbagil AS (
         programa_fomento,
         data_pagamento AS data_evento,
         valor
-    FROM {{ ref('pagamentos_bbagil_beneficiarios') }}
+    FROM {{ ref('silver_pagamento_bbagil') }}
 ),
 
 -- O piso é avaliado por (agente × mecanismo) para que a decisão "este agente
@@ -68,7 +68,7 @@ bbagil_elegivel AS (
 
 rouanet AS (
     SELECT beneficiario_documento, programa_fomento, data_evento, valor
-    FROM {{ ref('eventos_fomento_rouanet') }}
+    FROM {{ ref('silver_legado_sac_captacao_proponente') }}
 ),
 
 -- FSA e demais mecanismos federais do audiovisual. Como na Rouanet, o evento
@@ -76,7 +76,7 @@ rouanet AS (
 -- repasse de resíduo no extrato bancário.
 ancine AS (
     SELECT beneficiario_documento, programa_fomento, data_evento, valor
-    FROM {{ ref('eventos_fomento_ancine') }}
+    FROM {{ ref('silver_consulta') }}
 ),
 
 unificado AS (

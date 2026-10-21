@@ -194,7 +194,10 @@ aderência de cada PR.
 ├── dbt/minc/             # projeto dbt, fora do parser de DAGs
 │   └── models/
 │       ├── cotas_dbt/    # Meta 3 — diversidade, cotas e territórios
-│       ├── agentes_dbt/  # Meta 5 — perfil e primeiro acesso
+│       ├── bbagil/, salic/, ancine/, relatorio_gestao/, mapas/
+│       │                 # uma pasta por fonte: bronze_* e silver_* (ADR 0010)
+│       ├── intermediate/ # int_*: cruzamento entre fontes
+│       ├── cultura_em_numeros/  # Gold do produto; a Meta 5 é eixo2_meta5_*
 │       └── metadata/
 ├── helpers/              # utilitários importados pelas DAGs
 ├── plugins/              # clientes de API e extensões usados pelo Airflow

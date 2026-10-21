@@ -1,0 +1,98 @@
+version: 2
+
+# Ancine, na estrutura do ADR 0010. ancine.consulta é carregada fora deste
+# pipeline, direto da planilha da Ancine; bronze_consulta a copia como está e
+# silver_consulta resolve os cabeçalhos e tipa.
+models:
+  - name: bronze_consulta
+    description: >
+      Camada Bronze — cópia fiel de ancine.consulta, sem cast, filtro nem join
+      (ADR 0010). Todas as colunas chegam como na origem.
+      Os cabeçalhos ficam como vieram da planilha (maiúscula, espaço e acento).
+    config:
+      tags:
+        - bronze
+        - ancine
+    meta:
+      openmetadata:
+        domain: Cultura.Audiovisual
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: silver_consulta
+    description: >
+      Camada Silver — um evento por captação de projeto audiovisual registrada
+      pela Ancine (`ancine.consulta`), no mesmo formato dos recibos da Rouanet e
+      dos pagamentos do BB Ágil, para entrar em int_bbagil_salic_ancine_eventos_fomento.
+
+      Dois mecanismos, não um: 'FSA' responde literalmente ao que o documento da
+      meta nomeia; 'AUDIOVISUAL' carrega Lei do Audiovisual (ART1/ART3/1A/3A),
+      FUNCINES e os editais da Ancine. ART25/ART18 ficam de fora porque são
+      Rouanet e já entram pelo SALIC, por fonte melhor — incluí-los duplicaria
+      evento. Também ficam de fora RENDIMENTOS, CONTRAPARTIDA, OUTRAS FONTES e
+      lei estadual/municipal, que não são fomento federal ao agente.
+
+      Armadilhas de formato, as duas medidas nesta tabela: `data_captacao` é
+      TEXT no padrão AMERICANO M/D/YYYY ('7/12/2007' é 12 de julho, não 7 de
+      dezembro), e `valor_de_captacao` é TEXT no padrão brasileiro ('50.000,00').
+
+      A fonte é quase toda CNPJ — proponente pessoa física é, na prática,
+      invisível aqui. É a limitação desta fonte, e empurra na mesma direção de
+      todas as outras: pode deixar de revelar um veterano, nunca inventar um.
+    config:
+      tags: [silver, agentes, ancine, audiovisual, meta5]
+      meta:
+        status: Active
+        meta_objetivo: 'Meta 5 — eventos de captação do audiovisual federal'
+        origem_dados: 'ancine.consulta'
+        openmetadata:
+          domain: Cultura.Fomento Direto
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+          tags:
+            - Certification.Silver
+          glossary:
+            - MinC.Agentes.Proponente
+          customProperties:
+            responsavel_negocio: 'Meta 5 - agentes'
+    columns:
+      - name: beneficiario_documento
+        description: CPF (11) ou CNPJ (14) do proponente, normalizado com LPAD.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+            glossary:
+              - MinC.Identificadores.IdentificadorUnico
+        tests:
+          - not_null
+      - name: beneficiario_nome
+        description: >
+          Nome do proponente como a Ancine registra. Não é usado por nenhum
+          modelo a jusante — morre em int_bbagil_salic_ancine_eventos_fomento.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.NonSensitive
+      - name: programa_fomento
+        description: Mecanismo — 'FSA' ou 'AUDIOVISUAL'.
+        data_type: text
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['FSA', 'AUDIOVISUAL']
+      - name: data_evento
+        description: Data da captação, convertida do formato americano da origem.
+        data_type: date
+      - name: valor
+        description: Valor captado, convertido do formato brasileiro da origem.
+        data_type: numeric
+      - name: no_salic
+        description: >
+          Número do projeto no SALIC anotado pela Ancine. Não vem do SALIC — é
+          coluna da própria `ancine.consulta`. Serve de rastreabilidade e não
+          atravessa para int_bbagil_salic_ancine_eventos_fomento.
+        data_type: text

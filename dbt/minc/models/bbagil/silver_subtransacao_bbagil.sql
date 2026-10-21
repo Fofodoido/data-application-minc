@@ -1,5 +1,5 @@
--- Bronze bbagil — subtransacao_bbagil.
--- Origem: bbagil.subtransacao_bbagil, onde tudo chega como text da ingestão via API.
+-- Silver bbagil — subtransacao_bbagil.
+-- Origem: bronze_subtransacao_bbagil, cópia fiel de bbagil.subtransacao_bbagil, onde tudo chega como text da ingestão via API.
 -- Tipar é o trabalho desta camada.
 -- 33 colunas: 0 tipadas, 33 mantidas como texto.
 -- O cast vem do padrão medido no dado (scripts/perfilar_padroes.py),
@@ -38,4 +38,4 @@ select
     {{ bronze_texto("expensesequentialnumber") }} as expensesequentialnumber,
     {{ bronze_texto("expensescategory") }} as expensescategory,
     {{ bronze_texto("expensesdocuments") }} as expensesdocuments
-from {{ source("bbagil", "subtransacao_bbagil") }}
+from {{ ref("bronze_subtransacao_bbagil") }}

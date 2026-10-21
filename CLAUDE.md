@@ -24,7 +24,7 @@ As DAGs de API do TransfereGov gravam no datalakehouse (MinIO, `raw/` e
 |---|---|---|
 | `dags/data_ingest/` | uma DAG por endpoint de origem — 13 hoje | Sim |
 | `dags/dbt/minc_cosmos_dag.py` | a DAG que roda o projeto dbt inteiro | Raramente |
-| `dbt/minc/models/` | hoje organizado por domínio (`cotas_dbt`, `agentes_dbt`, `salic_dbt`, `*_bronze`); `mapas/` já segue a estrutura aprovada; a estrutura aprovada é pasta por fonte e por produto, com as camadas no nome do arquivo — [ADR 0010](docs/adr/0010-camadas-e-schemas-do-data-lakehouse.md). Modelo novo segue o ADR; o legado migra aos poucos. Use a skill `arquitetura-lakehouse-minc` antes de criar ou mover modelo | Sim |
+| `dbt/minc/models/` | hoje organizado por domínio (`cotas_dbt`, `salic_dbt`, `*_bronze`); `mapas/`, `bbagil/`, `salic/`, `ancine/`, `relatorio_gestao/`, `intermediate/` e `cultura_em_numeros/` (a Meta 5) já seguem a estrutura aprovada; a estrutura aprovada é pasta por fonte e por produto, com as camadas no nome do arquivo — [ADR 0010](docs/adr/0010-camadas-e-schemas-do-data-lakehouse.md). Modelo novo segue o ADR; o legado migra aos poucos. Use a skill `arquitetura-lakehouse-minc` antes de criar ou mover modelo | Sim |
 | `dbt/minc/models/sources.yml` | declaração das tabelas de origem | Sim |
 | `dbt/minc/target/` | saída do `dbt run` e do `dbt docs generate` | **Não.** Gerada, e ignorada pelo git |
 | `plugins/` | clientes de API (`cliente_*.py`), autenticação e regras de negócio | Sim |

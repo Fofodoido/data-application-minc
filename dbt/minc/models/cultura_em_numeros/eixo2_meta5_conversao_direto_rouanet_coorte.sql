@@ -6,7 +6,7 @@
 --
 -- Grão: 1 linha por (coorte de entrada × porta de entrada × tipo de pessoa).
 --
--- POR QUE ESTA TABELA EXISTE SEPARADA DA trajetoria_*: a contagem bruta de
+-- POR QUE ESTA TABELA EXISTE SEPARADA DA eixo2_meta5_trajetoria_*: a contagem bruta de
 -- quem fez o percurso é baixa e seria lida como "quase ninguém migra". Só que
 -- o fomento direto começou em 2023: quem entrou em 2026 teve meses para
 -- captar Rouanet, quem entrou em 2023 teve três anos. Comparar as coortes sem
@@ -19,12 +19,12 @@
 -- antes da Rouanet — quem já tinha aparecido na trilha da Ancine
 -- (AUDIOVISUAL/FSA) antes de 2023 não é novo entrante pelo fomento direto, e
 -- a pergunta 2.3 é sobre novo entrante. São 21 agentes nessa situação; eles
--- contam em DIRETO_DEPOIS_ROUANET na trajetoria_* (que classifica percurso,
+-- contam em DIRETO_DEPOIS_ROUANET na eixo2_meta5_trajetoria_* (que classifica percurso,
 -- não novidade) e ficam de fora daqui.
 --
 -- LEITURA DO NUMERADOR: 'acessou a Rouanet' aqui é captação real de recurso,
 -- a mesma definição de evento usada no resto da meta (ver
--- eventos_fomento_rouanet) — não é projeto protocolado nem aprovado. Um
+-- silver_legado_sac_captacao_proponente) — não é projeto protocolado nem aprovado. Um
 -- agente que submeteu projeto e não captou não conta como convertido.
 
 WITH agente AS (
@@ -35,7 +35,7 @@ WITH agente AS (
         MIN(data_primeiro_acesso_geral) AS data_entrada,
         MIN(data_primeiro_acesso_mecanismo)
             FILTER (WHERE programa_fomento = 'ROUANET') AS data_rouanet
-    FROM {{ ref('primeiro_acesso_agentes') }}
+    FROM {{ ref('int_bbagil_salic_ancine_primeiro_acesso') }}
     GROUP BY beneficiario_documento, tipo_pessoa
 ),
 

@@ -1,5 +1,5 @@
--- Bronze bbagil — extrato_bbagil.
--- Origem: bbagil.extrato_bbagil, onde tudo chega como text da ingestão via API.
+-- Silver bbagil — extrato_bbagil.
+-- Origem: bronze_extrato_bbagil, cópia fiel de bbagil.extrato_bbagil, onde tudo chega como text da ingestão via API.
 -- Tipar é o trabalho desta camada.
 -- 42 colunas: 23 tipadas, 19 mantidas como texto.
 -- O cast vem do padrão medido no dado (scripts/perfilar_padroes.py),
@@ -47,4 +47,4 @@ select
     {{ bronze_texto("bankorderpurposedescription") }} as bankorderpurposedescription,
     {{ bronze_texto("expensescategory") }} as expensescategory,
     {{ bronze_texto("expensesdocuments") }} as expensesdocuments
-from {{ source("bbagil", "extrato_bbagil") }}
+from {{ ref("bronze_extrato_bbagil") }}

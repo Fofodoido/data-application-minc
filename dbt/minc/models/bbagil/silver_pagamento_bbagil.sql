@@ -1,8 +1,8 @@
 {{ config(materialized='table') }}
 
--- Silver — unifica extrato-folha (bbagil_extrato_filtrado, já sem as
+-- Silver — unifica extrato-folha (silver_pagamento_extrato_bbagil, já sem as
 -- transações com subtransactionquantity > 0) e subtransações filtradas
--- (bbagil_subtransacoes_filtrado) em 1 linha por pagamento real a um
+-- (silver_pagamento_subtransacao_bbagil) em 1 linha por pagamento real a um
 -- beneficiário. Deriva programa_fomento (LPG/PNAB/LAB) a partir do código
 -- curto do programa devolvido pelo BSC (governmentprogramname).
 --
@@ -24,12 +24,12 @@
 
 WITH pagamentos AS (
     SELECT id_plano_acao, programa_curto, beneficiario_documento, valor, data_pagamento
-    FROM {{ ref('bbagil_extrato_filtrado') }}
+    FROM {{ ref('silver_pagamento_extrato_bbagil') }}
 
     UNION ALL
 
     SELECT id_plano_acao, programa_curto, beneficiario_documento, valor, data_pagamento
-    FROM {{ ref('bbagil_subtransacoes_filtrado') }}
+    FROM {{ ref('silver_pagamento_subtransacao_bbagil') }}
 ),
 
 classificado AS (

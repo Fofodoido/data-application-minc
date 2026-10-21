@@ -2,7 +2,8 @@
 
 -- Silver — um evento por captação real de recurso na Lei Rouanet, no mesmo
 -- formato dos pagamentos do BB Ágil, para entrar na espinha unificada
--- (eventos_fomento) que a Meta 5 usa para datar o primeiro acesso.
+-- (int_bbagil_salic_ancine_eventos_fomento) que a Meta 5 usa para datar o
+-- primeiro acesso.
 --
 -- POR QUE CAPTAÇÃO E NÃO APROVAÇÃO: o lado do fomento direto (LPG/PNAB/LAB)
 -- mede dinheiro que efetivamente saiu da conta para o agente. Para a Rouanet
@@ -43,7 +44,7 @@ WITH proponente_bruto AS (
             ELSE LPAD(REGEXP_REPLACE(TRIM(cgccpf), '[^0-9]', '', 'g'), 14, '0')
         END AS beneficiario_documento,
         NULL::TEXT AS beneficiario_nome
-    FROM {{ source('bronze_sac_legado', 'sac__projetos') }}
+    FROM {{ ref('bronze_legado_sac_projetos') }}
     WHERE anoprojeto IS NOT NULL
       AND sequencial IS NOT NULL
       AND cgccpf IS NOT NULL
@@ -61,7 +62,7 @@ WITH proponente_bruto AS (
             ELSE LPAD(REGEXP_REPLACE(TRIM(nrcnpjcpf), '[^0-9]', '', 'g'), 14, '0')
         END AS beneficiario_documento,
         NULLIF(TRIM(nmproponente), '') AS beneficiario_nome
-    FROM {{ source('bronze_sac_legado', 'sac__tbapiprojetorouanet') }}
+    FROM {{ ref('bronze_legado_sac_tbapiprojetorouanet') }}
     WHERE nrpronac IS NOT NULL
       AND nrcnpjcpf IS NOT NULL
       AND LENGTH(REGEXP_REPLACE(TRIM(nrcnpjcpf), '[^0-9]', '', 'g')) BETWEEN 8 AND 14
@@ -81,7 +82,7 @@ recibos AS (
         TRIM(anoprojeto) || TRIM(sequencial) AS pronac,
         dtrecibo::DATE AS data_evento,
         captacaoreal::NUMERIC AS valor
-    FROM {{ source('bronze_sac_legado', 'sac__captacao') }}
+    FROM {{ ref('bronze_legado_sac_captacao') }}
     WHERE dtrecibo IS NOT NULL
       -- as duas colunas são TEXT na bronze; o formato já foi verificado como
       -- ISO/numérico em 100% das linhas, mas o guarda fica para a ingestão

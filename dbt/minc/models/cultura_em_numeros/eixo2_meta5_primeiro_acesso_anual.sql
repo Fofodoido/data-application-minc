@@ -42,7 +42,7 @@ WITH atendidos_ano_mecanismo AS (
         ano_evento AS ano,
         programa_fomento,
         beneficiario_documento
-    FROM {{ ref('eventos_fomento') }}
+    FROM {{ ref('int_bbagil_salic_ancine_eventos_fomento') }}
 ),
 
 -- porta de entrada: uma linha por agente, o mecanismo e o ano em que ele
@@ -52,7 +52,7 @@ entradas AS (
         beneficiario_documento,
         programa_fomento,
         ano_primeiro_acesso_geral AS ano
-    FROM {{ ref('primeiro_acesso_agentes') }}
+    FROM {{ ref('int_bbagil_salic_ancine_primeiro_acesso') }}
     WHERE eh_porta_de_entrada
 ),
 
@@ -95,7 +95,7 @@ consolidado AS (
 -- que ainda não terminou tem menos gente nova acumulada e por isso puxa o
 -- percentual para baixo — a queda não é achado, é calendário.
 limite AS (
-    SELECT MAX(ano_evento) AS ano_max FROM {{ ref('eventos_fomento') }}
+    SELECT MAX(ano_evento) AS ano_max FROM {{ ref('int_bbagil_salic_ancine_eventos_fomento') }}
 )
 
 SELECT

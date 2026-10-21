@@ -1,6 +1,6 @@
 {{ config(materialized='table') }}
 
--- Bronze — sublançamentos do BB Gestão Ágil (schema bbagil), usados quando a
+-- Silver — sublançamentos do BB Gestão Ágil (bronze_subtransacao_bbagil), usados quando a
 -- transação-mãe do extrato tem subtransactionquantity > 0 (o beneficiário
 -- real do pagamento só aparece aqui, não na linha agregada do extrato).
 -- Porta pra SQL os 5 filtros de
@@ -16,7 +16,7 @@
 -- join de propósito: um plano de ação tem mais de uma conta (os da LPG têm
 -- duas) e o `id` da transação não é único entre elas — sem a conta, o join
 -- vira 1→N e cada sublançamento é contado duas vezes, inflando `valor` em
--- pagamentos_bbagil_beneficiarios e eventos_fomento.
+-- silver_pagamento_bbagil e int_bbagil_salic_ancine_eventos_fomento.
 
 SELECT
     s.id_plano_acao,
@@ -31,8 +31,8 @@ SELECT
     s.beneficiaryname AS beneficiario_nome,
     ABS(s.value::NUMERIC) AS valor,
     TO_DATE(s.paymentdate, 'DD/MM/YYYY') AS data_pagamento
-FROM {{ source('bbagil', 'subtransacao_bbagil') }} s
-JOIN {{ source('bbagil', 'extrato_bbagil') }} e
+FROM {{ ref('bronze_subtransacao_bbagil') }} s
+JOIN {{ ref('bronze_extrato_bbagil') }} e
     ON s.id_plano_acao = e.id_plano_acao
     AND s.id_plano_acao_dado_bancario = e.id_plano_acao_dado_bancario
     AND s.id_transacao_pai = e.id

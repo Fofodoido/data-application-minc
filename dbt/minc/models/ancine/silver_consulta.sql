@@ -2,7 +2,7 @@
 
 -- Silver — um evento por captação de projeto audiovisual registrada pela
 -- Ancine, no mesmo formato dos pagamentos do BB Ágil e dos recibos da Rouanet,
--- para entrar na espinha unificada (eventos_fomento).
+-- para entrar na espinha unificada (int_bbagil_salic_ancine_eventos_fomento).
 --
 -- POR QUE ESTA FONTE ENTRA: a pergunta da Meta 5 cita o FSA entre os
 -- mecanismos, e por muito tempo se registrou que a fonte dele era "uma
@@ -51,7 +51,7 @@
 -- linhas com CPF. Proponente pessoa física é, na prática, invisível aqui — é a
 -- limitação desta fonte, e ela empurra na mesma direção de todas as outras:
 -- pode deixar de revelar um veterano, nunca inventar um.
-{% set src = source("ancine", "consulta") %}
+{% set src = ref("bronze_consulta") %}
 {% set col = {
     "mecanismo": coalesce_por_nome(src, ["mecanismo"]),
     "cnpj_proponente": coalesce_por_nome(
@@ -88,7 +88,8 @@
     {% if nao_resolvidas %}
         {{
             exceptions.raise_compiler_error(
-                "eventos_fomento_ancine: não achei em ancine.consulta a(s) coluna(s) "
+                "silver_consulta: não achei em bronze_consulta (cópia de "
+                ~ "ancine.consulta) a(s) coluna(s) "
                 ~ nao_resolvidas
                 | join(", ")
                 ~ ". Veja os cabeçalhos reais com: SELECT column_name FROM "

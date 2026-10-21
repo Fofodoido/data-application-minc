@@ -1,16 +1,17 @@
 {{ config(enabled=false, materialized='table') }}
 
--- DESABILITADO junto com identificadores_contemplados, seu único insumo — ver
--- lá o motivo por extenso e a cadeia de DAGs necessária para reativar.
+-- DESABILITADO junto com int_relatorio_gestao_primeiro_acesso_contemplados,
+-- seu único insumo, e com silver_planilha_contemplados — ver lá o motivo por
+-- extenso e a cadeia de DAGs necessária para reativar.
 --
 -- Em uma linha: as listas oficiais de contemplados só existem como planilha
 -- anexada ao relatório de gestão do TransfereGov, e essa cadeia não rodou
 -- neste banco. Nenhum dos três gold que respondem à Meta 5 depende deste
 -- modelo — ele confere o indicador, não o produz.
 
--- Gold — o mesmo indicador de novos entrantes de primeiro_acesso_anual, mas
--- restrito a quem aparece nas LISTAS OFICIAIS DE CONTEMPLADOS dos editais
--- (LPG e PNAB), em vez de a todo agente visto recebendo dinheiro. Serve para
+-- Gold — o mesmo indicador de novos entrantes de
+-- eixo2_meta5_primeiro_acesso_anual, mas restrito a quem aparece nas LISTAS
+-- OFICIAIS DE CONTEMPLADOS dos editais (LPG e PNAB), em vez de a todo agente visto recebendo dinheiro. Serve para
 -- a leitura "dos contemplados de edital, quantos eram novos", e para expor a
 -- cobertura entre as duas populações.
 --
@@ -35,24 +36,15 @@
 -- um mapeamento que nunca pôde ser confirmado contra o formulário original
 -- seria pior que não responder.
 --
--- A classificação vem de primeiro_acesso_agentes, então já é CROSS-MECANISMO
--- e já considera a Rouanet desde 1993 — um contemplado da LPG que captou
+-- A classificação vem de int_bbagil_salic_ancine_primeiro_acesso, então já é
+-- CROSS-MECANISMO e já considera a Rouanet desde 1993 — um contemplado da LPG que captou
 -- Rouanet em 2010 aparece aqui corretamente como "Não".
 
-WITH contemplados AS (
-    SELECT DISTINCT id_normalizado, programa_fomento
-    FROM {{ ref('identificadores_contemplados') }}
-),
-
-acesso_contemplado AS (
-    SELECT
-        pa.programa_fomento,
-        pa.beneficiario_documento,
-        pa.categoria_primeiro_acesso
-    FROM {{ ref('primeiro_acesso_agentes') }} pa
-    INNER JOIN contemplados c
-        ON pa.beneficiario_documento = c.id_normalizado
-        AND pa.programa_fomento = c.programa_fomento
+-- O cruzamento com a lista de contemplados é feito na intermediate; aqui só
+-- se agrega.
+WITH acesso_contemplado AS (
+    SELECT programa_fomento, beneficiario_documento, categoria_primeiro_acesso
+    FROM {{ ref('int_relatorio_gestao_primeiro_acesso_contemplados') }}
 )
 
 SELECT

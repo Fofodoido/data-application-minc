@@ -8,10 +8,13 @@
 -- manual e nenhuma delas rodada aqui.
 --
 -- Por que ficou fora do caminho da Meta 5: as perguntas 1, 2.1, 2.2 e 2.3 são
--- respondidas por primeiro_acesso_anual, trajetoria_fomento_direto_rouanet e
--- conversao_direto_rouanet_coorte, e nenhum dos três encosta em contemplados —
--- a linhagem deles é plano de ação → BB Ágil, mais SALIC e Ancine. O único
--- dependente deste modelo é primeiro_acesso_contemplados, desabilitado junto.
+-- respondidas por eixo2_meta5_primeiro_acesso_anual,
+-- eixo2_meta5_trajetoria_fomento_direto_rouanet e
+-- eixo2_meta5_conversao_direto_rouanet_coorte, e nenhum dos três encosta em
+-- contemplados — a linhagem deles é plano de ação → BB Ágil, mais SALIC e
+-- Ancine. O único
+-- dependente deste modelo é int_relatorio_gestao_primeiro_acesso_contemplados
+-- (e, depois dele, eixo2_meta5_primeiro_acesso_contemplados), desabilitados junto.
 --
 -- O que se perde enquanto estiver assim: a aferição de cobertura. Este par de
 -- modelos é o que compara "quem o edital selecionou" com "quem apareceu no
@@ -20,13 +23,20 @@
 -- Banco do Brasil. Sem eles o número da Meta 5 continua correto, mas a
 -- limitação dele deixa de ser mensurável.
 --
--- Para reativar: rode a cadeia de anexos acima e troque para enabled=true aqui
--- e em primeiro_acesso_contemplados.
+-- Para reativar: rode a cadeia de anexos acima e troque para enabled=true aqui,
+-- nas duas bronze_planilha_contemplados_* desta pasta, em
+-- int_relatorio_gestao_primeiro_acesso_contemplados e em
+-- eixo2_meta5_primeiro_acesso_contemplados.
 
--- Bronze — unifica os identificadores (CPF/CNPJ normalizados) das listas
+-- Silver — unifica os identificadores (CPF/CNPJ normalizados) das listas
 -- oficiais de contemplados de edital, LPG + PNAB, para que
--- primeiro_acesso_contemplados possa restringir o indicador a quem foi de fato
--- selecionado.
+-- int_relatorio_gestao_primeiro_acesso_contemplados possa restringir o
+-- indicador a quem foi de fato selecionado.
+--
+-- As bronzes entram por ref() montado no laço abaixo; a linha depends_on
+-- deixa a linhagem explícita para o dbt e para quem lê o arquivo.
+-- depends_on: {{ ref('bronze_planilha_contemplados_lpg') }}
+-- depends_on: {{ ref('bronze_planilha_contemplados_pnab_ciclo_1') }}
 --
 -- COLUNAS "FANTASMA": a ingestão dinâmica de planilhas (extracao_planilhas.py)
 -- não normaliza espaços nem caracteres invisíveis nos nomes de coluna, então
@@ -64,7 +74,7 @@
 {# lista plana de (tabela, programa, coluna) para gerar um UNION ALL simples #}
 {% set pares = [] %}
 {% for tabela, programa in fontes %}
-    {% set src = source('relatorio_gestao', tabela) %}
+    {% set src = ref('bronze_' ~ tabela) %}
     {% set consulta %}
         SELECT column_name
         FROM information_schema.columns
@@ -90,7 +100,7 @@
 #}
 {% if execute and pares | length == 0 %}
     {{ exceptions.raise_compiler_error(
-        "identificadores_contemplados: nenhuma coluna de CPF/CNPJ encontrada em "
+        "silver_planilha_contemplados: nenhuma coluna de CPF/CNPJ encontrada em "
         ~ fontes | map(attribute=0) | join(', ') ~ ". As tabelas de contemplados "
         ~ "existem no banco alvo? Rode as DAGs de relatorio_gestao antes deste modelo."
     ) }}
@@ -101,7 +111,7 @@ WITH bruto AS (
     SELECT
         NULLIF(TRIM("{{ col }}"), '') AS doc_bruto,
         '{{ programa }}' AS programa_fomento
-    FROM {{ source('relatorio_gestao', tabela) }}
+    FROM {{ ref('bronze_' ~ tabela) }}
     {%- if not loop.last %}
     UNION ALL
     {% endif %}

@@ -1,11 +1,11 @@
 {{ config(materialized='table') }}
 
--- Bronze — extrato bancário do BB Gestão Ágil (schema bbagil), filtrado para
+-- Silver — extrato bancário do BB Gestão Ágil (bronze_extrato_bbagil), filtrado para
 -- manter só pagamentos reais a beneficiários finais. Porta pra SQL os 8
 -- filtros sequenciais de plugins/regras_negocio_bbagil.py::pipeline_filtro_extrato
 -- (módulo órfão em Python, mantido só como referência/histórico dessas regras):
 --   1. beneficiário válido (documento != '0') e sem subtransações (as com
---      subtransactionquantity > 0 são tratadas em bbagil_subtransacoes_filtrado,
+--      subtransactionquantity > 0 são tratadas em silver_pagamento_subtransacao_bbagil,
 --      pra não contar o mesmo pagamento 2x).
 --   2. remove transferências para o próprio Banco do Brasil (documento '191').
 --   3. remove transações internas/impostos/aplicações automáticas (descriptionname).
@@ -39,7 +39,7 @@ WITH base AS (
         value::NUMERIC AS valor,
         TO_DATE(bookingdate, 'DD/MM/YYYY') AS data_pagamento,
         descriptionname
-    FROM {{ source('bbagil', 'extrato_bbagil') }}
+    FROM {{ ref('bronze_extrato_bbagil') }}
     WHERE subtransactionquantity = '0'
       AND beneficiarydocumentid IS NOT NULL
       AND beneficiarydocumentid NOT IN ('0', '191')

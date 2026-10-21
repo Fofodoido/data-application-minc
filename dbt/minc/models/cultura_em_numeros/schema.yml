@@ -1,7 +1,12 @@
 version: 2
 
+# Cultura em Números, produto de dados (Gold, ADR 0010).
+#
+# CONVENÇÃO DE NOME DESTE PRODUTO: eixo<N>_meta<M>_<nome>, porque é por eixo e
+# meta que a coordenação procura um indicador. A Meta 5 (novos entrantes no
+# fomento federal) é do eixo 2.
 models:
-  - name: primeiro_acesso_anual
+  - name: eixo2_meta5_primeiro_acesso_anual
     description: >
       Camada Gold — Meta 5. A série que responde às perguntas 1, 2.1 e 2.2:
       percentual anual de agentes de primeiro acesso, no total
@@ -21,7 +26,7 @@ models:
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — Percentual anual de proponentes de primeiro acesso'
-        origem_dados: 'eventos_fomento + primeiro_acesso_agentes'
+        origem_dados: 'int_bbagil_salic_ancine_eventos_fomento + int_bbagil_salic_ancine_primeiro_acesso'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier1
@@ -101,7 +106,7 @@ models:
         tests:
           - not_null
 
-  - name: trajetoria_fomento_direto_rouanet
+  - name: eixo2_meta5_trajetoria_fomento_direto_rouanet
     description: >
       Camada Gold — Meta 5, pergunta 2.3: há novos entrantes pelo fomento
       direto (LAB/LPG/PNAB) que depois acessaram a Lei Rouanet? Grão: 1
@@ -117,7 +122,7 @@ models:
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — Trajetória entre fomento direto e Rouanet'
-        origem_dados: 'primeiro_acesso_agentes'
+        origem_dados: 'int_bbagil_salic_ancine_primeiro_acesso'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier1
@@ -169,7 +174,7 @@ models:
           antigo do grupo. NULL nos baldes que não têm fomento direto
           (SO_ROUANET, SO_AUDIOVISUAL). Serve para situar o grupo no tempo,
           não para comparar taxas — para isso use
-          conversao_direto_rouanet_coorte, que controla tempo de exposição.
+          eixo2_meta5_conversao_direto_rouanet_coorte, que controla tempo de exposição.
         data_type: date
       - name: ultima_entrada_direto
         description: >
@@ -197,14 +202,14 @@ models:
           SO_ROUANET e SO_AUDIOVISUAL, e 0 em MESMO_DIA.
         data_type: numeric
 
-  - name: conversao_direto_rouanet_coorte
+  - name: eixo2_meta5_conversao_direto_rouanet_coorte
     description: >
       Camada Gold — Meta 5, pergunta 2.3 com tempo de exposição controlado:
       dos agentes que ENTRARAM no fomento federal pelo fomento direto
       (LAB/LPG/PNAB), quantos depois captaram na Lei Rouanet? Grão: 1 linha
       por (coorte de entrada × porta de entrada × tipo de pessoa).
 
-      Existe separada de trajetoria_fomento_direto_rouanet porque a contagem
+      Existe separada de eixo2_meta5_trajetoria_fomento_direto_rouanet porque a contagem
       bruta é enganosa: o fomento direto nasceu em 2023, então cada coorte
       teve uma janela diferente para converter. converteram_ate_12m dá a
       todas a mesma janela; coorte_com_12m_completos marca quais coortes já
@@ -219,7 +224,7 @@ models:
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — Conversão do fomento direto para a Rouanet, por coorte'
-        origem_dados: 'primeiro_acesso_agentes'
+        origem_dados: 'int_bbagil_salic_ancine_primeiro_acesso'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier1
@@ -313,14 +318,14 @@ models:
         tests:
           - not_null
 
-  - name: primeiro_acesso_contemplados
+  - name: eixo2_meta5_primeiro_acesso_contemplados
     description: >
       Camada Gold — Meta 5. O mesmo indicador de novos entrantes, restrito a
       quem aparece nas listas oficiais de contemplados dos editais (LPG e
       PNAB), em vez de a todo agente visto recebendo dinheiro. Grão: 1 linha
       por (programa × categoria de primeiro acesso).
 
-      A classificação vem de primeiro_acesso_agentes, então já é
+      A classificação vem de int_bbagil_salic_ancine_primeiro_acesso, então já é
       cross-mecanismo e já considera a Rouanet desde 1993.
 
       Cobertura parcial e medida: a interseção entre lista de contemplados e
@@ -335,7 +340,7 @@ models:
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — Novos Entrantes entre contemplados de edital'
-        origem_dados: 'primeiro_acesso_agentes + identificadores_contemplados'
+        origem_dados: 'int_bbagil_salic_ancine_primeiro_acesso + silver_planilha_contemplados'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier1

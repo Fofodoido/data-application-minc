@@ -1,7 +1,7 @@
 version: 2
 sources:
   # Schema `bronze` — saída da ingestão SALIC v1, LEGADA. Mantido só pelas
-  # tabelas que `agentes_dbt/silver/eventos_fomento_rouanet` ainda consome e
+  # tabelas que `salic/silver_legado_sac_captacao_proponente` ainda consome e
   # que não têm equivalente no `salic_bronze` da ingestão v2 (ADR 0005).
   # Não declare tabela nova aqui: a bronze nova é `bronze_sac`, em salic_bronze.
   - name: bronze_sac_legado

@@ -1,0 +1,103 @@
+version: 2
+
+# Planilhas anexadas ao relatório de gestão do TransfereGov, na estrutura do
+# ADR 0010. Tudo enabled=false: as tabelas só nascem da cadeia de anexos, que
+# não rodou neste banco (ver silver_planilha_contemplados).
+models:
+  - name: bronze_planilha_contemplados_lpg
+    description: >
+      Camada Bronze — cópia fiel de relatorio_gestao.planilha_contemplados_lpg, sem cast, filtro nem join
+      (ADR 0010). Todas as colunas chegam como na origem.
+    config:
+      tags:
+        - bronze
+        - relatorio_gestao
+    meta:
+      openmetadata:
+        domain: Cultura.Fomento Direto
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: bronze_planilha_contemplados_pnab_ciclo_1
+    description: >
+      Camada Bronze — cópia fiel de relatorio_gestao.planilha_contemplados_pnab_ciclo_1, sem cast, filtro nem join
+      (ADR 0010). Todas as colunas chegam como na origem.
+    config:
+      tags:
+        - bronze
+        - relatorio_gestao
+    meta:
+      openmetadata:
+        domain: Cultura.Fomento Direto
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: silver_planilha_contemplados
+    description: >
+      Bronze — unifica identificadores (CPF/CNPJ normalizados) de
+      contemplados LPG + PNAB, para que eixo2_meta5_primeiro_acesso_contemplados possa
+      restringir o indicador a quem foi de fato selecionado em edital.
+      Grão: 1 linha por (documento × programa), já distinta.
+
+      As colunas de documento são resolvidas dinamicamente via
+      information_schema nas tabelas de origem, porque a ingestão de
+      planilhas não normaliza espaços nem NBSP nos cabeçalhos e o mesmo
+      campo vira várias colunas, cada uma com parte dos dados. O padrão
+      anterior (ILIKE '%cpf%cnpj%') exigia "cpf" antes de "cnpj" e não casava
+      "cnpj" sozinho nem "cpf/ cnpj", deixando de fora ~2.100 contemplados do
+      PNAB — a maioria deles com pagamento comprovado no extrato bancário.
+
+      São duas fontes hoje: planilha_contemplados_lpg e
+      planilha_contemplados_pnab_ciclo_1. Se nenhuma coluna de documento for
+      encontrada nelas, o modelo aborta na compilação com mensagem explícita,
+      em vez de gerar um UNION ALL vazio e quebrar com erro de sintaxe.
+
+      Colunas "cpf (anonimizado)" são excluídas de propósito: trazem
+      ***XXXXXX** no lugar do documento. Continua valendo que o CPF de PF da
+      lista geral do PNAB, fora do PNCV, não é rastreável.
+
+      Materializado como VIEW — a varredura do information_schema roda em
+      tempo de compilação e o resultado é pequeno. A view existe no banco, então o conector do
+      OpenMetadata a enxerga normalmente.
+    config:
+      tags: [silver, agentes, contemplados, meta5]
+      meta:
+        status: Active
+        meta_objetivo: 'Meta 5 — identificadores de contemplados de edital'
+        origem_dados: 'relatorio_gestao.planilha_contemplados_lpg + planilha_contemplados_pnab_ciclo_1'
+        openmetadata:
+          domain: Cultura.Fomento Direto
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+          tags:
+            - Certification.Bronze
+          glossary:
+            - MinC.Agentes.Contemplado
+          customProperties:
+            responsavel_negocio: 'Meta 5 - agentes'
+    columns:
+      - name: id_normalizado
+        description: >
+          CPF ou CNPJ do contemplado, normalizado (só dígitos, LPAD para 11 ou
+          14). Descarta documento com menos de 9 ou mais de 14 dígitos e
+          documento só de zeros.
+        data_type: text
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Identificadores.IdentificadorUnico
+        tests:
+          - not_null
+      - name: programa_fomento
+        description: Programa de fomento — 'LPG' ou 'PNAB'.
+        data_type: text
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Politicas.LPG
+              - MinC.Politicas.PNAB
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['LPG', 'PNAB']

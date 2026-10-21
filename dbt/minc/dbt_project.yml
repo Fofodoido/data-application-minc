@@ -21,13 +21,43 @@ models:
     metadata:
       +materialized: incremental
       +schema: metadata
-    # Meta 5 — novos entrantes no fomento federal. Uma linhagem so, cruzando
-    # LPG, PNAB, LAB (BB Agil), Rouanet (SALIC) e audiovisual (Ancine).
-    agentes_dbt:
+    # Estrutura do ADR 0010: uma pasta por fonte, uma por produto e a
+    # `intermediate`, arquivos planos com a camada no prefixo do nome, e o
+    # schema e o nome da pasta. A Meta 5 (novos entrantes no fomento federal)
+    # mora aqui: bbagil, salic, ancine e relatorio_gestao ate a silver, o
+    # cruzamento na intermediate e as golds em cultura_em_numeros.
+    #
+    # As pastas de fonte caem no MESMO schema da tabela que a ingestao grava
+    # (bbagil.extrato_bbagil, ancine.consulta). Nao colide: todo modelo aqui
+    # comeca com bronze_ ou silver_, e nenhuma tabela de origem tem esse
+    # prefixo. View por padrao, como a antiga bbagil_bronze: a bronze e
+    # `select *` e a silver tipada so aplica cast. Os modelos que filtram e
+    # cruzam declaram `table` no proprio arquivo.
+    bbagil:
+      +schema: bbagil
+      +materialized: view
+    ancine:
+      +schema: ancine
+      +materialized: view
+    relatorio_gestao:
+      +schema: relatorio_gestao
+      +materialized: view
+    # SALIC no layout do ADR. Divide o schema `salic` com o salic_dbt ate ele
+    # migrar; os nomes nao colidem (bronze_legado_*/silver_legado_* aqui,
+    # sac__* la).
+    salic:
+      +schema: salic
+      +materialized: view
+    intermediate:
+      +schema: intermediate
       +materialized: table
-      +schema: agentes
+    # Produto de dados Cultura em Numeros (Gold). Convencao de nome do produto:
+    # eixo<N>_meta<M>_<nome> -- ver o schema.yml da pasta.
+    cultura_em_numeros:
+      +schema: cultura_em_numeros
+      +materialized: table
     # Meta 3 — cotas/reservas (LPG + PNAB). Domínio próprio, schema minc_cotas,
-    # separado do agentes_dbt (meta 5 do colega). Bronze materializado como table
+    # separado da Meta 5 (meta 5 do colega). Bronze materializado como table
     # porque filtra o lixo de parsing (fica ~20k linhas em vez de milhões).
     cotas_dbt:
       +schema: cotas
@@ -52,7 +82,7 @@ models:
       +schema: mapas
       +materialized: table
     # SALIC — Lei Rouanet. Um dominio, as camadas separadas por PASTA, como em
-    # agentes_dbt e cotas_dbt.
+    # cotas_dbt.
     #
     # Schema `salic`, NAO `salic_bronze`. Com target `prod` o
     # generate_schema_name_for_env aplica o custom schema literal, entao
@@ -102,6 +132,3 @@ models:
     bacen_bronze:
       +materialized: view
       +schema: bacen_bronze
-    bbagil_bronze:
-      +materialized: view
-      +schema: bbagil_bronze

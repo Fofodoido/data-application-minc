@@ -1,11 +1,11 @@
 {{ config(materialized='table') }}
 
--- Silver — grão fino da Meta 5: uma linha por (agente × mecanismo), dizendo
+-- Intermediate — grão fino da Meta 5: uma linha por (agente × mecanismo), dizendo
 -- quando ele entrou naquele mecanismo e se aquela entrada foi a porta de
 -- entrada dele no fomento federal como um todo. TODAS as golds da meta derivam
 -- daqui, e é aqui que se olha para auditar um agente específico.
--- Fica em silver justamente por isso: é fato em nível de linha, não número de
--- consumo, e gold não deve depender de gold.
+-- Fica na intermediate justamente por isso: é fato em nível de linha, não
+-- número de consumo, e gold não deve depender de gold.
 --
 -- A DEFINIÇÃO QUE IMPORTA: novo entrante é comparação CROSS-MECANISMO. O
 -- primeiro acesso do agente é o menor evento dele em QUALQUER mecanismo
@@ -32,7 +32,7 @@ WITH por_agente_mecanismo AS (
         MIN(ano_inicio_observacao) AS ano_inicio_observacao,
         COUNT(*) AS qtd_eventos,
         SUM(valor) AS valor_total
-    FROM {{ ref('eventos_fomento') }}
+    FROM {{ ref('int_bbagil_salic_ancine_eventos_fomento') }}
     GROUP BY beneficiario_documento, programa_fomento, tipo_pessoa
 ),
 

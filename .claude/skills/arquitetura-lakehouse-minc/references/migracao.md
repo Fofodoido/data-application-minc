@@ -22,7 +22,8 @@ Silver; o que cruza fontes é Intermediate; o que está em `gold/` é Gold do
 e a Bronze passa a ser cópia fiel ou `source`.
 
 Decida a camada pelo que o SQL faz. `stg_agentes_pf` filtra e normaliza →
-Silver. `eventos_fomento` une BB Ágil, SALIC e Ancine → Intermediate. Um
+Silver. `eventos_fomento` une BB Ágil, SALIC e Ancine → Intermediate (virou
+`int_bbagil_salic_ancine_eventos_fomento`). Um
 modelo que faz as duas coisas vira dois.
 
 ## Os seis passos, nesta ordem

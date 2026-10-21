@@ -118,17 +118,21 @@ O que não se improvisa aqui:
 
 ## Fase 3 — Modelos dbt
 
-Projeto em `dbt/minc/`, perfil `minc`. Dois domínios, cada um com schema próprio:
+Projeto em `dbt/minc/`, perfil `minc`. Modelo novo segue o
+[ADR 0010](../../../docs/adr/0010-camadas-e-schemas-do-data-lakehouse.md) — pasta
+por fonte (`bbagil/`, `salic/`, `ancine/`, `mapas/`…) com `bronze_*` e `silver_*`,
+`intermediate/` com `int_*` e uma pasta por produto (`cultura_em_numeros/`), schema
+igual ao nome da pasta. Use a skill `arquitetura-lakehouse-minc` antes de criar ou
+mover modelo. A Meta 5 já está nessa estrutura; o legado por domínio ainda existe:
 
-| Domínio | Schema | Assunto |
+| Domínio legado | Schema | Assunto |
 |---|---|---|
 | `cotas_dbt` | `minc_cotas` | Meta 3 — diversidade, cotas e territórios |
-| `agentes_dbt` | `minc_agentes` | Meta 5 — perfil e primeiro acesso |
 | `metadata` | `metadata` | metadados do próprio pipeline |
 
-Camadas, em ordem: `bronze/` (o bruto tipado e limpo do lixo de parsing),
-`silver/` (regra de negócio aplicada), `gold/` (o que vai a consumo).
-`agentes_dbt` tem também `views/`.
+No legado, as camadas são subpastas, em ordem: `bronze/` (o bruto tipado e limpo
+do lixo de parsing), `silver/` (regra de negócio aplicada), `gold/` (o que vai a
+consumo).
 
 Materialização já vem definida por camada no `dbt_project.yml` — **não repita
 `+materialized` no modelo** a menos que ele seja exceção, e nesse caso comente por

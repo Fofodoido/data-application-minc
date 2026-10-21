@@ -32,7 +32,12 @@ body:
       label: Domínio
       options:
         - cotas_dbt
-        - agentes_dbt
+        - bbagil
+        - salic
+        - ancine
+        - relatorio_gestao
+        - intermediate
+        - cultura_em_numeros
         - metadata
         - Novo domínio
     validations:

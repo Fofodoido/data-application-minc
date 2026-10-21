@@ -1,5 +1,5 @@
--- Bronze bbagil — controle_extracao_bbagil_extrato.
--- Origem: bbagil.controle_extracao_bbagil_extrato, onde tudo chega como text da ingestão via API.
+-- Silver bbagil — controle_extracao_bbagil_extrato.
+-- Origem: bronze_controle_extracao_bbagil_extrato, cópia fiel de bbagil.controle_extracao_bbagil_extrato, onde tudo chega como text da ingestão via API.
 -- Tipar é o trabalho desta camada.
 -- 7 colunas: 5 tipadas, 2 mantidas como texto.
 -- O cast vem do padrão medido no dado (scripts/perfilar_padroes.py),
@@ -12,4 +12,4 @@ select
     {{ bronze_texto("status") }} as status,
     {{ bronze_inteiro("qtd_transacoes") }} as qtd_transacoes,
     {{ bronze_texto("mensagem_erro") }} as mensagem_erro
-from {{ source("bbagil", "controle_extracao_bbagil_extrato") }}
+from {{ ref("bronze_controle_extracao_bbagil_extrato") }}
