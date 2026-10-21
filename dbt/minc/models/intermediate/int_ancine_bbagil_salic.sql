@@ -3,7 +3,7 @@
 -- Intermediate — junta numa forma só os eventos em que um agente recebeu
 -- recurso, vindos de três fontes:
 --   BB_AGIL  saída de dinheiro das contas dos planos de ação (silver_pagamento_bbagil)
---   SALIC    recibo de captação da Lei Rouanet (silver_legado_sac_captacao_proponente)
+--   SALIC    recibo de captação da Lei Rouanet (silver_sac_captacao_proponente)
 --   ANCINE   captação de projeto audiovisual (silver_consulta)
 --
 -- Grão: 1 linha por evento da fonte. Nada é descartado nem classificado aqui
@@ -57,7 +57,7 @@ salic AS (
         NULL::INTEGER AS id_plano_acao_dado_bancario,
         pronac,
         NULL::TEXT AS no_salic
-    FROM {{ ref('silver_legado_sac_captacao_proponente') }}
+    FROM {{ ref('silver_sac_captacao_proponente') }}
 ),
 
 ancine AS (
