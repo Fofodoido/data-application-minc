@@ -69,12 +69,17 @@
     {% if nao_resolvidas %}
         {{
             exceptions.raise_compiler_error(
-                "silver_consulta: não achei em ancine.consulta a(s) coluna(s) "
+                "silver_consulta: não achei em "
+                ~ colunas_de
+                ~ " a(s) coluna(s) "
                 ~ nao_resolvidas
                 | join(", ")
                 ~ ". Veja os cabeçalhos reais com: SELECT column_name FROM "
-                ~ "information_schema.columns WHERE table_schema = 'ancine' "
-                ~ "AND table_name = 'consulta';"
+                ~ "information_schema.columns WHERE table_schema = '"
+                ~ colunas_de.schema
+                ~ "' AND table_name = '"
+                ~ colunas_de.identifier
+                ~ "';"
             )
         }}
     {% endif %}
@@ -108,10 +113,10 @@ with
                     )
             end as proponente_documento,
             nullif(trim(nome_proponente), '') as proponente_nome,
-            case
-                when data_captacao ~ '^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$'
-                then to_date(data_captacao, 'FMMM/FMDD/YYYY')
-            end as data_captacao,
+            -- data inválida que passa na regex ('2/30/2015') vira NULL em vez de
+            -- derrubar o modelo: com todos os mecanismos na silver, ela não pode
+            -- assumir que a data de um mecanismo fora do escopo é boa
+            {{ data_texto("data_captacao", "MDY") }} as data_captacao,
             case
                 when valor_de_captacao ~ '^-?[0-9.]+,[0-9]{2}$'
                 then replace(replace(valor_de_captacao, '.', ''), ',', '.')::numeric
