@@ -29,9 +29,9 @@
 -- nao identifica evento: recibo sem PRONAC resolvido, sem id ou sem data.
 --
 -- LIMITE CONHECIDO: a reconciliacao por ano/PRONAC com
--- `salic/silver_sac_captacao_proponente` (Meta 5) e o gate G3 e ainda nao foi
--- feita. Os dois leem a mesma sac__captacao da v2 desde 21/10/2026; ate a
--- reconciliacao, convivem e nenhum substitui o outro.
+-- `salic/silver_legado_sac_captacao_proponente` -- que le a bronze v1, no
+-- schema `bronze`, e nao esta v2 -- e o gate G3 e ainda nao foi feita. Ate la
+-- os dois convivem, e nenhum substitui o outro.
 select
     idcaptacao as id_captacao,
     {{ pronac_de_ano_sequencial("anoprojeto", "sequencial") }} as pronac,

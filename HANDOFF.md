@@ -224,9 +224,8 @@ Mais os **7 golds** e seus `exposures`, que dependem inteiramente do A0.
   não sabe que os modelos estão `Disabled` — isso é verdade só no repositório.
 - **Exportador RAG fail-closed** não existe. A política está escrita e testada
   offline; quem a aplica ainda não foi escrito.
-- **Reconciliação com `salic/silver_sac_captacao_proponente`** (ex-`eventos_fomento_rouanet`)
-  pendente. Desde 21/10/2026 ela lê a v2, como o `fct_captacao_rouanet`; nenhum
-  modelo lê mais o schema `bronze` da v1.
+- **Reconciliação com `salic/silver_legado_sac_captacao_proponente`** (ex-`eventos_fomento_rouanet`, que lê a v1) pendente, e sem
+  plano de aposentadoria da v1.
 - **Segredo do HMAC-SHA256** para a chave de identidade entre bases. Hash simples
   de CPF/CNPJ está descartado: é enumerável.
 

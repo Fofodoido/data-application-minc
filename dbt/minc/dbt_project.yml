@@ -42,9 +42,9 @@ models:
     relatorio_gestao:
       +schema: relatorio_gestao
       +materialized: view
-    # SALIC no layout do ADR, lendo a ingestao v2 (salic_bronze). Divide o
-    # schema `salic` com o salic_dbt ate ele migrar; os nomes nao colidem
-    # (bronze_sac_*/silver_sac_* aqui, sac__* la).
+    # SALIC no layout do ADR. Divide o schema `salic` com o salic_dbt ate ele
+    # migrar; os nomes nao colidem (bronze_legado_*/silver_legado_* aqui,
+    # sac__* la).
     salic:
       +schema: salic
       +materialized: view

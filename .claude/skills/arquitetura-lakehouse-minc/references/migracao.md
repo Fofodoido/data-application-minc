@@ -67,6 +67,5 @@ modelo que faz as duas coisas vira dois.
   outra contagem.
 - **Não deixe a pasta velha pela metade** por mais de um PR. Pasta com dois
   padrões é pior que pasta com um padrão errado.
-- **Não leia a ingestão SALIC v1** (schema `bronze`, `sources_sac_legado.yml`)
-  em modelo novo nem migrado: desde 21/10/2026 nenhum modelo lê de lá, e a v2
-  (`salic_bronze`) é a oficial (ADR 0005, HANDOFF.md).
+- **Não apague a pasta velha enquanto `sources_sac_legado.yml` existir**: três
+  modelos ainda leem o schema `bronze` da ingestão v1 (ADR 0005, HANDOFF.md).
