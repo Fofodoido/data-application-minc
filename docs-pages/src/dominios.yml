@@ -99,29 +99,34 @@ dominios:
   - slug: agentes
     rotulo: Perfil dos agentes
     meta: 5
-    subtitulo: Quem são os proponentes, e quantos chegaram pela primeira vez
+    subtitulo: Quantos agentes chegaram ao fomento federal pela primeira vez
     contexto: |
       Uma política de fomento pode distribuir muito recurso e ainda assim
       alcançar sempre as mesmas pessoas. O indicador de primeiro acesso existe
-      para responder se a política alargou o alcance — quantos contemplados
-      nunca haviam acessado fomento público antes.
+      para responder se a política alargou o alcance — quantos agentes que
+      receberam recurso nunca haviam sido contemplados antes, em nenhum
+      mecanismo federal.
     o_que_faz: |
-      Consolida os proponentes das duas leis num cadastro único por documento
-      (CPF ou CNPJ), resolvendo o mesmo agente aparecendo escrito de formas
-      diferentes em fontes diferentes. Sobre esse cadastro, classifica cada
-      proponente pelo histórico de acesso a fomento e cruza com a informação de
-      quem foi de fato contemplado.
+      Junta numa linha do tempo única, por CPF ou CNPJ, cada vez que um agente
+      recebeu recurso federal: pagamentos da LAB, LPG e PNAB no extrato do BB
+      Ágil, captações da Lei Rouanet no SALIC e captações do audiovisual na
+      Ancine. O primeiro evento de cada agente, em qualquer mecanismo, é a sua
+      porta de entrada. As tabelas do Cultura em Números (eixo 2, Meta 5)
+      contam os novos entrantes por ano e por mecanismo, e medem quem entrou
+      pelo fomento direto e depois chegou à Rouanet.
     perguntas:
-      - Quantos proponentes distintos existem, sem contar a mesma pessoa duas vezes?
-      - Quantos acessaram fomento público pela primeira vez?
-      - Entre os contemplados, qual a proporção de primeiro acesso?
-      - Como o perfil muda entre PNAB e LPG?
-    sistemas: [Relatórios de gestão, BB Ágil, TransfereGov]
+      - Que percentual dos agentes atendidos em cada ano era de primeiro acesso?
+      - Quantos novos entrantes a Rouanet recebeu ao longo dos anos?
+      - Quantos novos entrantes vieram pela LAB, pela LPG e pela PNAB?
+      - Quem entrou pelo fomento direto depois chegou a captar pela Rouanet?
+    sistemas: [BB Ágil, SALIC, Ancine, TransfereGov]
     armadilhas: |
-      O histórico de acesso anterior é declarado pelo próprio proponente no
-      formulário de inscrição, não verificado contra uma base externa. É a única
-      informação disponível, e é o que o indicador mede — mas quem cita o número
-      precisa dizer isso junto.
+      "Novo entrante" quer dizer "sem evento anterior nas fontes disponíveis",
+      não "nunca acessou". Fonte que falta só transforma veterano em falso novo
+      entrante, nunca o contrário, então os percentuais são teto. O fomento
+      direto só é observável desde 2023 (a Aldir Blanc emergencial está fora do
+      escopo por decisão de 20/08/2026), e o BB Ágil só enxerga contas
+      administradas pelo Banco do Brasil. O último ano da série é parcial.
 
   - slug: metadata
     rotulo: Metadados do pipeline

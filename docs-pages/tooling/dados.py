@@ -45,15 +45,24 @@ def montar() -> dict[str, Any]:
         por_dominio.setdefault(m["dominio"], []).append(m)
 
     dominios: list[dict[str, Any]] = []
+    # Gold de produto (ADR 0010) entra no domínio pela meta do nome
+    # (`eixo2_meta5_*` -> domínio com `meta: 5`), não pela pasta: a pasta do
+    # produto reúne metas de domínios diferentes.
+    por_meta: dict[int, list[dict[str, Any]]] = {}
+    for m in modelos:
+        if m.get("meta") is not None:
+            por_meta.setdefault(m["meta"], []).append(m)
+
     for item in curada["dominios"]:
         slug = item["slug"]
-        seus = por_dominio.get(slug, [])
+        seus = por_dominio.get(slug, []) + por_meta.get(item.get("meta"), [])
         if not seus and not item.get("sem_modelos"):
             # Falhar aqui é de propósito: slug que não casa é quase sempre erro
             # de digitação, e um domínio vazio passaria despercebido no site.
             raise SystemExit(
                 f"domínio '{slug}' não casou nenhum modelo. Confira se a pasta "
-                f"dbt/minc/models/{slug}_dbt/ existe, ou declare `sem_modelos: true`."
+                f"dbt/minc/models/{slug}_dbt/ existe, se há gold eixo<N>_meta<M>_* "
+                f"para a `meta:` dele, ou declare `sem_modelos: true`."
             )
 
         camadas: dict[str, list[dict[str, Any]]] = {}
@@ -76,7 +85,17 @@ def montar() -> dict[str, Any]:
             }
         )
 
+    # A pasta do produto não é domínio: suas golds já entraram pela meta. Só
+    # sobra aviso para gold de produto cuja meta nenhum domínio declara.
+    metas_curadas = {d.get("meta") for d in curada["dominios"]}
+    sem_dominio = {
+        m["dominio"]
+        for m in modelos
+        if m.get("meta") is not None and m["meta"] not in metas_curadas
+    }
+    produtos = {m["dominio"] for m in modelos if m.get("meta") is not None}
     fora = set(por_dominio) - {d["slug"] for d in curada["dominios"]}
+    fora -= produtos - sem_dominio
     if fora:
         log.warning(
             "domínios sem curadoria, fora do site: %s — acrescente em dominios.yml",

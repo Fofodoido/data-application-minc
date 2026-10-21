@@ -33,6 +33,15 @@ CAMADAS = ("bronze", "silver", "gold", "views")
 # Camada pelo prefixo do nome do arquivo, para a estrutura plana do ADR 0010.
 PREFIXOS_CAMADA = {"bronze_": "bronze", "silver_": "silver", "int_": "intermediate"}
 
+# Pastas de produto de dados (Gold, ADR 0010): o arquivo não leva prefixo de
+# camada. Mesma lista de PRODUTOS em .claude/skills/arquitetura-lakehouse-minc/
+# scripts/verificar.py.
+PRODUTOS = {"cultura_em_numeros", "sefli", "patrimonio_cultural"}
+
+# Convenção de nome do Cultura em Números: eixo<N>_meta<M>_<nome>. A meta é o
+# que liga a gold ao domínio do site (`meta:` em dominios.yml).
+RE_META = re.compile(r"^eixo\d+_meta(\d+)_")
+
 
 def _yaml_da_pasta(pasta: Path) -> dict[str, Any]:
     """Lê o schema.yml da pasta. Devolve dict vazio quando não há ou é inválido."""
@@ -78,6 +87,8 @@ def _classificar(relativo: Path) -> tuple[str, str]:
     if not partes:
         return "geral", "outros"
     dominio = partes[0].removesuffix("_dbt")
+    if partes[0] in PRODUTOS:
+        return dominio, "gold"
     camada = next((p for p in partes if p in CAMADAS), None)
     if camada is None:
         # Estrutura do ADR 0010: arquivos planos na pasta da fonte, e a camada
@@ -118,11 +129,13 @@ def coletar() -> dict[str, Any]:
         meta = cache_meta[arquivo.parent].get(arquivo.stem, {})
 
         materializacao = RE_MATERIALIZED.search(sql)
+        meta_produto = RE_META.match(arquivo.stem) if camada == "gold" else None
         modelos.append(
             {
                 "nome": arquivo.stem,
                 "dominio": dominio,
                 "camada": camada,
+                "meta": int(meta_produto.group(1)) if meta_produto else None,
                 "caminho": str(arquivo.relative_to(MODELS_DIR.parents[2])),
                 "descricao": meta.get("descricao", ""),
                 "colunas": meta.get("colunas", []),

@@ -49,6 +49,7 @@ DOMINIO_POR_SCHEMA = {
 # Tier pela camada: quem pode depender daquilo.
 TIER_POR_CAMADA = {
     "gold": "Tier.Tier1",
+    "intermediate": "Tier.Tier2",
     "silver": "Tier.Tier2",
     "views": "Tier.Tier2",
     "bronze": "Tier.Tier3",
@@ -56,12 +57,27 @@ TIER_POR_CAMADA = {
 }
 TIER_SOURCE = "Tier.Tier4"
 
-# Subdominio dos modelos dbt, pela pasta do dominio.
+# Subdominio dos modelos dbt, pela pasta. Na estrutura do ADR 0010 a pasta de
+# fonte segue o subdominio do schema de origem; intermediate e produto sao
+# fomento, que e o que a Meta 5 mede.
 DOMINIO_POR_PASTA = {
-    "agentes_dbt": FOMENTO,
     "cotas_dbt": FOMENTO,
     "metadata": FOMENTO,
+    "bbagil": FEDERATIVO,
+    "salic": INCENTIVO,
+    "ancine": INCENTIVO,
+    "relatorio_gestao": FOMENTO,
+    "intermediate": FOMENTO,
+    "cultura_em_numeros": FOMENTO,
 }
+
+# Pastas de produto de dados (Gold, ADR 0010): o modelo nao leva prefixo de
+# camada. Mesma lista de PRODUTOS em .claude/skills/arquitetura-lakehouse-minc/
+# scripts/verificar.py.
+PRODUTOS = {"cultura_em_numeros", "sefli", "patrimonio_cultural"}
+
+# Camada pelo prefixo do nome do modelo, na estrutura plana do ADR 0010.
+PREFIXOS_CAMADA = {"bronze_": "bronze", "silver_": "silver", "int_": "intermediate"}
 
 # Coluna -> termo de glossario. So conceito cuja ambiguidade muda a leitura.
 GLOSSARIO_POR_COLUNA = {
@@ -141,6 +157,20 @@ def camada_do_caminho(caminho: Path) -> str | None:
     return None
 
 
+def camada_do_modelo(caminho: Path, nome: str) -> str | None:
+    """Camada pela subpasta (layout antigo) ou, no layout plano do ADR 0010,
+    pela pasta de produto ou pelo prefixo do nome do modelo."""
+    camada = camada_do_caminho(caminho)
+    if camada:
+        return camada
+    if caminho.parts[0] in PRODUTOS:
+        return "gold"
+    return next(
+        (c for prefixo, c in PREFIXOS_CAMADA.items() if nome.startswith(prefixo)),
+        None,
+    )
+
+
 def main() -> int:
     dry = "--dry-run" in sys.argv
     contagem = {
@@ -173,9 +203,9 @@ def main() -> int:
             rel = caminho.relative_to(MODELOS)
             pasta = rel.parts[0] if len(rel.parts) > 1 else None
             dominio = DOMINIO_POR_PASTA.get(pasta, FOMENTO)
-            camada = camada_do_caminho(rel)
-            tier = TIER_POR_CAMADA.get(camada) if camada else None
             for modelo in modelos:
+                camada = camada_do_modelo(rel, modelo.get("name", ""))
+                tier = TIER_POR_CAMADA.get(camada) if camada else None
                 anotar(
                     modelo,
                     dominio=dominio,
