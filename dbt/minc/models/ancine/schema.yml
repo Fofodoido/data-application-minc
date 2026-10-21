@@ -37,7 +37,7 @@ models:
       tags: [silver, ancine, audiovisual]
       meta:
         status: Active
-        origem_dados: 'ancine.consulta'
+        origem_dados: 'bronze_consulta'
         openmetadata:
           domain: Cultura.Incentivo Fiscal
           tier: Tier.Tier2

@@ -66,7 +66,7 @@ models:
       tags: [silver, transferegov, contemplados]
       meta:
         status: Active
-        origem_dados: 'relatorio_gestao.planilha_contemplados_lpg + planilha_contemplados_pnab_ciclo_1'
+        origem_dados: 'bronze_planilha_contemplados_lpg + bronze_planilha_contemplados_pnab_ciclo_1'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier2

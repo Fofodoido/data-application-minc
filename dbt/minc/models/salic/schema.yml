@@ -73,7 +73,7 @@ models:
       tags: [silver, salic, rouanet]
       meta:
         status: Active
-        origem_dados: 'bronze_sac_legado.sac__captacao + sac__projetos + sac__tbapiprojetorouanet'
+        origem_dados: 'bronze_legado_sac_captacao + bronze_legado_sac_projetos + bronze_legado_sac_tbapiprojetorouanet'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier2
