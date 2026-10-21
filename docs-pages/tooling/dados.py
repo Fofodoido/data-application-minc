@@ -28,6 +28,34 @@ def _curadoria() -> dict[str, Any]:
     return dados
 
 
+def _modelos_por_meta(modelos: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+    """Os modelos de cada meta: as golds dela e tudo que elas consomem.
+
+    Gold de produto (ADR 0010) entra no domínio pela meta do nome
+    (`eixo2_meta5_*` -> domínio com `meta: 5`), não pela pasta: a pasta do
+    produto reúne metas de domínios diferentes. As silvers e intermediates do
+    produto moram na pasta da fonte (`bbagil/`, `ancine/`, `intermediate/`...),
+    que não é domínio curado, e entram pela linhagem das golds.
+    """
+    por_nome = {m["nome"]: m for m in modelos}
+    por_meta: dict[int, list[dict[str, Any]]] = {}
+    for m in modelos:
+        if m.get("meta") is not None:
+            por_meta.setdefault(m["meta"], []).append(m)
+
+    for modelos_da_meta in por_meta.values():
+        vistos = {g["nome"] for g in modelos_da_meta}
+        fila = [d for g in modelos_da_meta for d in g.get("depende_de", [])]
+        while fila:
+            nome = fila.pop()
+            if nome in vistos or nome not in por_nome:
+                continue
+            vistos.add(nome)
+            modelos_da_meta.append(por_nome[nome])
+            fila.extend(por_nome[nome].get("depende_de", []))
+    return por_meta
+
+
 def montar() -> dict[str, Any]:
     dbt = read_json("dbt")
     airflow = read_json("airflow")
@@ -45,13 +73,8 @@ def montar() -> dict[str, Any]:
         por_dominio.setdefault(m["dominio"], []).append(m)
 
     dominios: list[dict[str, Any]] = []
-    # Gold de produto (ADR 0010) entra no domínio pela meta do nome
-    # (`eixo2_meta5_*` -> domínio com `meta: 5`), não pela pasta: a pasta do
-    # produto reúne metas de domínios diferentes.
-    por_meta: dict[int, list[dict[str, Any]]] = {}
-    for m in modelos:
-        if m.get("meta") is not None:
-            por_meta.setdefault(m["meta"], []).append(m)
+    por_meta = _modelos_por_meta(modelos)
+    no_site = {m["nome"] for ms in por_meta.values() for m in ms}
 
     for item in curada["dominios"]:
         slug = item["slug"]
@@ -96,6 +119,10 @@ def montar() -> dict[str, Any]:
     produtos = {m["dominio"] for m in modelos if m.get("meta") is not None}
     fora = set(por_dominio) - {d["slug"] for d in curada["dominios"]}
     fora -= produtos - sem_dominio
+    # pasta de fonte cujos modelos já entraram todos pela linhagem de uma meta
+    fora = {
+        d for d in fora if any(m["nome"] not in no_site for m in por_dominio[d])
+    }
     if fora:
         log.warning(
             "domínios sem curadoria, fora do site: %s — acrescente em dominios.yml",

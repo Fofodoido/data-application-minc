@@ -57,7 +57,7 @@
         "bronze_consulta"
       ],
       "sources": [],
-      "linhas_sql": 139
+      "linhas_sql": 144
     },
     {
       "nome": "serie_sgs",
@@ -259,7 +259,7 @@
       "camada": "silver",
       "meta": null,
       "caminho": "dbt/minc/models/bbagil/silver_extrato_bbagil.sql",
-      "descricao": "Camada silver tipada de bbagil.extrato_bbagil, lida de bronze_extrato_bbagil. 42 colunas, 23 com cast aplicado.",
+      "descricao": "Camada silver tipada de bbagil.extrato_bbagil, lida de bronze_extrato_bbagil. 42 colunas, 22 com cast aplicado.",
       "colunas": [
         {
           "nome": "errors",
@@ -445,7 +445,7 @@
       "camada": "silver",
       "meta": null,
       "caminho": "dbt/minc/models/bbagil/silver_pagamento_bbagil.sql",
-      "descricao": "Camada Silver — une silver_pagamento_extrato_bbagil e silver_pagamento_subtransacao_bbagil em 1 linha por saída de dinheiro para um beneficiário identificado, com tipo_lancamento dizendo de qual lado a linha veio.\nNão classifica programa nem decide quem conta como agente cultural: o código do programa sai como o BSC devolve, com as colunas que os filtros de negócio da Gold usam. Alimenta int_ancine_bbagil_salic.",
+      "descricao": "Camada Silver — une silver_pagamento_extrato_bbagil e silver_pagamento_subtransacao_bbagil em 1 linha por movimento de dinheiro com beneficiário informado, com tipo_lancamento dizendo de qual lado a linha veio.\nNão decide o que é pagamento efetivo (estorno, só débito, status 'Pago'), não classifica programa nem decide quem conta como agente cultural: as linhas saem como a limpeza deixou, com as colunas que a Gold usa para essas decisões. Alimenta int_ancine_bbagil_salic.",
       "colunas": [
         {
           "nome": "tipo_lancamento",
@@ -480,15 +480,23 @@
           "descricao": "Descrição do lançamento no extrato; nula no sublançamento. É nela que a Gold reconhece lançamento interno da conta (aplicação, resgate, imposto, ordem bancária cancelada)."
         },
         {
+          "nome": "creditdebitindicator",
+          "descricao": "No extrato, 'D' (débito) ou 'C' (crédito). Nulo no sublançamento, que é sempre saída para o beneficiário."
+        },
+        {
+          "nome": "status_prestacao_contas",
+          "descricao": "No sublançamento, o status na prestação de contas ('Pago' é o que chegou ao beneficiário). Nulo no extrato."
+        },
+        {
           "nome": "valor",
-          "descricao": "Valor do pagamento, em reais."
+          "descricao": "Valor do lançamento, em reais."
         },
         {
           "nome": "data_pagamento",
           "descricao": "Data do lançamento, convertida para DATE."
         }
       ],
-      "colunas_descritas": 10,
+      "colunas_descritas": 12,
       "testes": 8,
       "materializacao": "table",
       "depende_de": [
@@ -496,7 +504,7 @@
         "silver_pagamento_subtransacao_bbagil"
       ],
       "sources": [],
-      "linhas_sql": 54
+      "linhas_sql": 62
     },
     {
       "nome": "silver_pagamento_extrato_bbagil",
@@ -504,7 +512,7 @@
       "camada": "silver",
       "meta": null,
       "caminho": "dbt/minc/models/bbagil/silver_pagamento_extrato_bbagil.sql",
-      "descricao": "Camada Silver — saídas de dinheiro do extrato bancário do BB Gestão Ágil: lançamentos a débito, sem subtransação, com beneficiário identificado e sem os dois lados de um estorno. Lê a silver_extrato_bbagil e só limpa.\nGrão: 1 linha por transação de débito do extrato — a chave da origem é (id_plano_acao, id_plano_acao_dado_bancario, id). Transações com subtransactionquantity > 0 ficam fora de propósito: nelas o beneficiário real só aparece no sublançamento, e quem os traz é silver_pagamento_subtransacao_bbagil.\nO par débito/crédito de mesmo valor, mesmo documento e mesma conta é lido como estorno e removido dos dois lados.\nQuem conta como pagamento a agente cultural não é decidido aqui: repasse a ente público, devolução ao FNC, transferência ao Banco do Brasil e lançamento interno continuam na tabela, para a Gold filtrar.",
+      "descricao": "Camada Silver — lançamentos do extrato bancário do BB Gestão Ágil, débito e crédito, sem subtransação e com beneficiário informado. Lê a silver_extrato_bbagil e só limpa.\nGrão: 1 linha por transação do extrato — a chave da origem é (id_plano_acao, id_plano_acao_dado_bancario, id). Transações com subtransactionquantity > 0 ficam fora de propósito: nelas o beneficiário real só aparece no sublançamento, e quem os traz é silver_pagamento_subtransacao_bbagil.\nO que é pagamento efetivo não é decidido aqui: o crédito fica, com creditdebitindicator e a chave do pareamento (conta, documento bruto, valor), e a Gold eixo2_meta5_evento_fomento descarta os dois lados de um estorno e fica só com o débito. Quem conta como pagamento a agente cultural também não: repasse a ente público, devolução ao FNC, transferência ao Banco do Brasil e lançamento interno continuam na tabela, para a Gold filtrar.",
       "colunas": [
         {
           "nome": "id_plano_acao",
@@ -539,22 +547,26 @@
           "descricao": "Descrição do lançamento no extrato. É nela que a Gold reconhece lançamento interno da conta (aplicação, resgate, imposto, ordem bancária cancelada)."
         },
         {
+          "nome": "creditdebitindicator",
+          "descricao": "'D' (débito, saída de dinheiro da conta) ou 'C' (crédito). A Gold usa para parear estorno e para ficar só com o débito."
+        },
+        {
           "nome": "valor",
-          "descricao": "Valor do pagamento (débito), em reais."
+          "descricao": "Valor do lançamento, em reais, como a origem registra."
         },
         {
           "nome": "data_pagamento",
           "descricao": "Data do lançamento, convertida para DATE."
         }
       ],
-      "colunas_descritas": 10,
+      "colunas_descritas": 11,
       "testes": 7,
       "materializacao": "table",
       "depende_de": [
         "silver_extrato_bbagil"
       ],
       "sources": [],
-      "linhas_sql": 89
+      "linhas_sql": 53
     },
     {
       "nome": "silver_pagamento_subtransacao_bbagil",
@@ -562,7 +574,7 @@
       "camada": "silver",
       "meta": null,
       "caminho": "dbt/minc/models/bbagil/silver_pagamento_subtransacao_bbagil.sql",
-      "descricao": "Camada Silver — sublançamentos pagos do BB Gestão Ágil, usados quando a transação-mãe do extrato tem subtransactionquantity > 0 (o beneficiário real só aparece aqui). Fica só o status 'Pago', com beneficiário identificado.\nGrão: 1 linha por sublançamento pago. Complementa silver_pagamento_extrato_bbagil sem sobrepô-lo; os dois juntos formam silver_pagamento_bbagil.\nO valor vem em módulo (ABS): no sublançamento o sinal indica o lado da partida dobrada, não devolução. Repasse a ente público continua na tabela, para a Gold filtrar.",
+      "descricao": "Camada Silver — sublançamentos do BB Gestão Ágil, usados quando a transação-mãe do extrato tem subtransactionquantity > 0 (o beneficiário real só aparece aqui), com beneficiário informado. Todos os status ficam: o recorte do 'Pago' é da Gold.\nGrão: 1 linha por sublançamento. Complementa silver_pagamento_extrato_bbagil sem sobrepô-lo; os dois juntos formam silver_pagamento_bbagil.\nO valor vem em módulo (ABS): no sublançamento o sinal indica o lado da partida dobrada, não devolução. Repasse a ente público continua na tabela, para a Gold filtrar.",
       "colunas": [
         {
           "nome": "id_plano_acao",
@@ -595,9 +607,13 @@
         {
           "nome": "data_pagamento",
           "descricao": "Data do lançamento, convertida para DATE."
+        },
+        {
+          "nome": "status_prestacao_contas",
+          "descricao": "Status do sublançamento na prestação de contas (subtransactionaccountabilityname). 'Pago' é o que chegou ao beneficiário; a Gold fica só com ele."
         }
       ],
-      "colunas_descritas": 8,
+      "colunas_descritas": 9,
       "testes": 6,
       "materializacao": "table",
       "depende_de": [
@@ -605,7 +621,7 @@
         "silver_subtransacao_bbagil"
       ],
       "sources": [],
-      "linhas_sql": 48
+      "linhas_sql": 51
     },
     {
       "nome": "silver_subtransacao_bbagil",
@@ -2084,7 +2100,7 @@
       "camada": "gold",
       "meta": 5,
       "caminho": "dbt/minc/models/data_products/cultura_em_numeros/eixo2_meta5_evento_fomento.sql",
-      "descricao": "Camada Gold — Meta 5. Espinha do indicador: um evento por vez que um agente cultural recebeu recurso de uma política federal de fomento, já com a política classificada. É a tabela que permite perguntar \"este agente já havia sido contemplado antes?\" acima do mecanismo, que é o que a pergunta da meta exige. Grão: 1 linha por (documento, mecanismo, data, valor).\nLê int_ancine_bbagil_salic, que só junta as fontes, e concentra a regra de negócio de quem conta (ADR 0010): no BB Ágil, fora repasse a ente público, devolução ao FNC, transferência ao Banco do Brasil e lançamento interno, com a política (LPG, PNAB, LAB) derivada do código do programa; na Ancine, só FSA e o fomento federal ao audiovisual (fora ART25/ART18, que já entram pelo SALIC); na Rouanet e na Ancine, só valor positivo.\nJanelas de observação, muito assimétricas: ROUANET 1993+, AUDIOVISUAL 2005+, FSA 2011+, LAB/LPG/PNAB 2023+. Por isso a coluna ano_inicio_observacao, que a gold anual usa para marcar os anos censurados à esquerda.\nO piso de valor (var limiar_valor_fomento, padrão 375) é aplicado sobre o TOTAL do agente naquele mecanismo, não por transação, e só ao BB Ágil — é lá que existe resíduo de transação que não é repasse de fomento.",
+      "descricao": "Camada Gold — Meta 5. Espinha do indicador: um evento por vez que um agente cultural recebeu recurso de uma política federal de fomento, já com a política classificada. É a tabela que permite perguntar \"este agente já havia sido contemplado antes?\" acima do mecanismo, que é o que a pergunta da meta exige. Grão: 1 linha por (documento, mecanismo, data, valor).\nLê int_ancine_bbagil_salic, que só junta as fontes, e concentra a regra de negócio (ADR 0010). O que é pagamento efetivo: no extrato do BB Ágil, só o débito e fora os dois lados de um estorno (débito e crédito da mesma conta, documento e valor); no sublançamento, só o status 'Pago'. Quem conta: no BB Ágil, fora repasse a ente público, devolução ao FNC, transferência ao Banco do Brasil e lançamento interno, com a política (LPG, PNAB, LAB) derivada do código do programa; na Ancine, só FSA e o fomento federal ao audiovisual (fora ART25/ART18, que já entram pelo SALIC); na Rouanet e na Ancine, só valor positivo.\nJanelas de observação, muito assimétricas: ROUANET 1993+, AUDIOVISUAL 2005+, FSA 2011+, LAB/LPG/PNAB 2023+. Por isso a coluna ano_inicio_observacao, que a gold anual usa para marcar os anos censurados à esquerda.\nO piso de valor (var limiar_valor_fomento, padrão 375) é aplicado sobre o TOTAL do agente naquele mecanismo, não por transação, e só ao BB Ágil — é lá que existe resíduo de transação que não é repasse de fomento.",
       "colunas": [
         {
           "nome": "beneficiario_documento",
@@ -2126,7 +2142,7 @@
         "int_ancine_bbagil_salic"
       ],
       "sources": [],
-      "linhas_sql": 175
+      "linhas_sql": 232
     },
     {
       "nome": "eixo2_meta5_primeiro_acesso_agente",
@@ -2538,7 +2554,7 @@
       "camada": "intermediate",
       "meta": null,
       "caminho": "dbt/minc/models/intermediate/int_ancine_bbagil_salic.sql",
-      "descricao": "Camada Intermediate. Os eventos em que um agente recebeu recurso, de três fontes numa forma só: saída de dinheiro das contas do BB Ágil (silver_pagamento_bbagil), recibo de captação da Rouanet (silver_legado_sac_captacao_proponente) e captação de projeto audiovisual da Ancine (silver_consulta). Grão: 1 linha por evento da fonte.\nNada é descartado nem classificado aqui. Quais eventos contam, a que política cada um pertence e o piso de valor são regra de negócio e ficam na Gold (eixo2_meta5_evento_fomento). Por isso cada linha leva o que a fonte tem para essa decisão — programa_bruto, beneficiario_nome, beneficiario_documento_bruto, descriptionname, tipo_lancamento —, nulo onde a fonte não tem.",
+      "descricao": "Camada Intermediate. Os eventos em que um agente recebeu recurso, de três fontes numa forma só: saída de dinheiro das contas do BB Ágil (silver_pagamento_bbagil), recibo de captação da Rouanet (silver_legado_sac_captacao_proponente) e captação de projeto audiovisual da Ancine (silver_consulta). Grão: 1 linha por evento da fonte.\nNada é descartado nem classificado aqui. Quais eventos contam, a que política cada um pertence e o piso de valor são regra de negócio e ficam na Gold (eixo2_meta5_evento_fomento). Por isso cada linha leva o que a fonte tem para essa decisão — programa_bruto, beneficiario_nome, beneficiario_documento_bruto, descriptionname, tipo_lancamento —, nulo onde a fonte não tem.\nAs linhas do BB Ágil chegam mesmo sem documento normalizado, sem data ou sem valor, e com crédito e sublançamento de qualquer status: o pareamento de estorno na Gold é por conta e precisa das duas pernas, e só depois dele a Gold descarta o que não é atribuível a um agente. Por isso os testes de não nulo daqui valem só para SALIC e Ancine.",
       "colunas": [
         {
           "nome": "fonte",
@@ -2550,7 +2566,7 @@
         },
         {
           "nome": "beneficiario_documento",
-          "descricao": "CPF (11) ou CNPJ (14) de quem recebeu, normalizado com LPAD."
+          "descricao": "CPF (11) ou CNPJ (14) de quem recebeu, normalizado com LPAD. Pode ser nulo no BB Ágil (beneficiarypersontype fora de 1/2)."
         },
         {
           "nome": "beneficiario_documento_bruto",
@@ -2562,7 +2578,7 @@
         },
         {
           "nome": "tipo_pessoa",
-          "descricao": "'PF' (11 dígitos) ou 'PJ' (14)."
+          "descricao": "'PF' (11 dígitos) ou 'PJ' (14). Nulo quando o documento é nulo."
         },
         {
           "nome": "data_evento",
@@ -2585,8 +2601,20 @@
           "descricao": "Descrição do lançamento no extrato do BB Ágil. Nula no sublançamento e nas outras fontes."
         },
         {
+          "nome": "creditdebitindicator",
+          "descricao": "No extrato do BB Ágil, 'D' (débito) ou 'C' (crédito); a Gold usa para parear estorno e ficar só com o débito. Nulo no sublançamento e nas outras fontes."
+        },
+        {
+          "nome": "status_prestacao_contas",
+          "descricao": "No sublançamento do BB Ágil, o status na prestação de contas ('Pago' é o que chegou ao beneficiário). Nulo no extrato e nas outras fontes."
+        },
+        {
           "nome": "id_plano_acao",
           "descricao": "Plano de ação dono da conta, no BB Ágil. Nulo nas outras fontes."
+        },
+        {
+          "nome": "id_plano_acao_dado_bancario",
+          "descricao": "A conta bancária, no BB Ágil — chave do pareamento de estorno na Gold, que acontece dentro de uma conta só. Nulo nas outras fontes."
         },
         {
           "nome": "pronac",
@@ -2597,7 +2625,7 @@
           "descricao": "Número do projeto no SALIC anotado pela Ancine. Nulo nas outras fontes."
         }
       ],
-      "colunas_descritas": 14,
+      "colunas_descritas": 17,
       "testes": 7,
       "materializacao": "table",
       "depende_de": [
@@ -2606,7 +2634,7 @@
         "silver_pagamento_bbagil"
       ],
       "sources": [],
-      "linhas_sql": 96
+      "linhas_sql": 113
     },
     {
       "nome": "int_ancine_bbagil_salic_transferegov",
