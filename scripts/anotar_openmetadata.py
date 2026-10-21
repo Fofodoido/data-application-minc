@@ -66,15 +66,15 @@ DOMINIO_POR_PASTA = {
     "bbagil": FEDERATIVO,
     "salic": INCENTIVO,
     "ancine": INCENTIVO,
-    "relatorio_gestao": FOMENTO,
+    "transferegov": FOMENTO,
     "intermediate": FOMENTO,
     "cultura_em_numeros": FOMENTO,
 }
 
-# Pastas de produto de dados (Gold, ADR 0010): o modelo nao leva prefixo de
-# camada. Mesma lista de PRODUTOS em .claude/skills/arquitetura-lakehouse-minc/
-# scripts/verificar.py.
-PRODUTOS = {"cultura_em_numeros", "sefli", "patrimonio_cultural"}
+# Produtos de dados (Gold, ADR 0010) moram em `data_products/<produto>/`, e o
+# modelo nao leva prefixo de camada. O produto e a subpasta: nao ha lista a
+# manter em dia.
+DATA_PRODUCTS = "data_products"
 
 # Camada pelo prefixo do nome do modelo, na estrutura plana do ADR 0010.
 PREFIXOS_CAMADA = {"bronze_": "bronze", "silver_": "silver", "int_": "intermediate"}
@@ -163,12 +163,19 @@ def camada_do_modelo(caminho: Path, nome: str) -> str | None:
     camada = camada_do_caminho(caminho)
     if camada:
         return camada
-    if caminho.parts[0] in PRODUTOS:
+    if caminho.parts[0] == DATA_PRODUCTS:
         return "gold"
     return next(
         (c for prefixo, c in PREFIXOS_CAMADA.items() if nome.startswith(prefixo)),
         None,
     )
+
+
+def pasta_do_modelo(rel: Path) -> str | None:
+    """Fonte, `intermediate` ou, dentro de data_products/, o produto."""
+    if rel.parts[0] == DATA_PRODUCTS and len(rel.parts) > 2:
+        return rel.parts[1]
+    return rel.parts[0] if len(rel.parts) > 1 else None
 
 
 def main() -> int:
@@ -201,8 +208,7 @@ def main() -> int:
         modelos = doc.get("models") or []
         if modelos:
             rel = caminho.relative_to(MODELOS)
-            pasta = rel.parts[0] if len(rel.parts) > 1 else None
-            dominio = DOMINIO_POR_PASTA.get(pasta, FOMENTO)
+            dominio = DOMINIO_POR_PASTA.get(pasta_do_modelo(rel), FOMENTO)
             for modelo in modelos:
                 camada = camada_do_modelo(rel, modelo.get("name", ""))
                 tier = TIER_POR_CAMADA.get(camada) if camada else None

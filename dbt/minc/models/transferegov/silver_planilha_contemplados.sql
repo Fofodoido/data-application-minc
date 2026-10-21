@@ -13,7 +13,7 @@
 -- eixo2_meta5_conversao_direto_rouanet_coorte, e nenhum dos três encosta em
 -- contemplados — a linhagem deles é plano de ação → BB Ágil, mais SALIC e
 -- Ancine. O único
--- dependente deste modelo é int_relatorio_gestao_primeiro_acesso_contemplados
+-- dependente deste modelo é int_ancine_bbagil_salic_transferegov
 -- (e, depois dele, eixo2_meta5_primeiro_acesso_contemplados), desabilitados junto.
 --
 -- O que se perde enquanto estiver assim: a aferição de cobertura. Este par de
@@ -25,13 +25,12 @@
 --
 -- Para reativar: rode a cadeia de anexos acima e troque para enabled=true aqui,
 -- nas duas bronze_planilha_contemplados_* desta pasta, em
--- int_relatorio_gestao_primeiro_acesso_contemplados e em
+-- int_ancine_bbagil_salic_transferegov e em
 -- eixo2_meta5_primeiro_acesso_contemplados.
 
 -- Silver — unifica os identificadores (CPF/CNPJ normalizados) das listas
--- oficiais de contemplados de edital, LPG + PNAB, para que
--- int_relatorio_gestao_primeiro_acesso_contemplados possa restringir o
--- indicador a quem foi de fato selecionado.
+-- oficiais de contemplados de edital, LPG + PNAB, que os entes anexam ao
+-- relatório de gestão do plano de ação no TransfereGov Fundo a Fundo.
 --
 -- As bronzes entram por ref() montado no laço abaixo; a linha depends_on
 -- deixa a linhagem explícita para o dbt e para quem lê o arquivo.
@@ -54,7 +53,9 @@
 -- de documento da tabela inteira produz exatamente o mesmo conjunto.
 --
 -- Por isso a resolução é dinâmica via information_schema, e não uma lista
--- fixa de nomes. O padrão anterior, ILIKE '%cpf%cnpj%', exigia "cpf" ANTES de
+-- fixa de nomes. A varredura olha a tabela de origem de cada bronze (macro
+-- origem_da_bronze), e não a bronze: a bronze é view e, num ambiente novo,
+-- ainda não existe na hora do `dbt compile`. O padrão anterior, ILIKE '%cpf%cnpj%', exigia "cpf" ANTES de
 -- "cnpj" na mesma string: não casava "cnpj" sozinho nem "cpf/ cnpj", e
 -- deixava de fora ~2.100 contemplados do PNAB (a maioria deles COM pagamento
 -- comprovado no extrato bancário) e as colunas só-CNPJ da LPG.
@@ -74,7 +75,7 @@
 {# lista plana de (tabela, programa, coluna) para gerar um UNION ALL simples #}
 {% set pares = [] %}
 {% for tabela, programa in fontes %}
-    {% set src = ref('bronze_' ~ tabela) %}
+    {% set src = origem_da_bronze('bronze_' ~ tabela) if execute else ref('bronze_' ~ tabela) %}
     {% set consulta %}
         SELECT column_name
         FROM information_schema.columns
@@ -102,7 +103,7 @@
     {{ exceptions.raise_compiler_error(
         "silver_planilha_contemplados: nenhuma coluna de CPF/CNPJ encontrada em "
         ~ fontes | map(attribute=0) | join(', ') ~ ". As tabelas de contemplados "
-        ~ "existem no banco alvo? Rode as DAGs de relatorio_gestao antes deste modelo."
+        ~ "existem no banco alvo? Rode a cadeia de anexos do TransfereGov antes deste modelo."
     ) }}
 {% endif %}
 

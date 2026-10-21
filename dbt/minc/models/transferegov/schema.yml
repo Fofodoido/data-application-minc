@@ -1,8 +1,10 @@
 version: 2
 
-# Planilhas anexadas ao relatório de gestão do TransfereGov, na estrutura do
-# ADR 0010. Tudo enabled=false: as tabelas só nascem da cadeia de anexos, que
-# não rodou neste banco (ver silver_planilha_contemplados).
+# TransfereGov, na estrutura do ADR 0010. Por ora só as planilhas que os entes
+# anexam ao relatório de gestão do plano de ação no Fundo a Fundo, que a
+# extracao_anexos_dag grava no schema `relatorio_gestao`. Tudo enabled=false:
+# as tabelas só nascem da cadeia de anexos, que não rodou neste banco (ver
+# silver_planilha_contemplados).
 models:
   - name: bronze_planilha_contemplados_lpg
     description: >
@@ -11,7 +13,7 @@ models:
     config:
       tags:
         - bronze
-        - relatorio_gestao
+        - transferegov
     meta:
       openmetadata:
         domain: Cultura.Fomento Direto
@@ -25,7 +27,7 @@ models:
     config:
       tags:
         - bronze
-        - relatorio_gestao
+        - transferegov
     meta:
       openmetadata:
         domain: Cultura.Fomento Direto
@@ -34,13 +36,14 @@ models:
 
   - name: silver_planilha_contemplados
     description: >
-      Bronze — unifica identificadores (CPF/CNPJ normalizados) de
-      contemplados LPG + PNAB, para que eixo2_meta5_primeiro_acesso_contemplados possa
-      restringir o indicador a quem foi de fato selecionado em edital.
-      Grão: 1 linha por (documento × programa), já distinta.
+      Camada Silver — unifica identificadores (CPF/CNPJ normalizados) das
+      listas oficiais de contemplados de edital, LPG + PNAB, que os entes
+      anexam ao relatório de gestão do plano de ação no TransfereGov Fundo a
+      Fundo. Grão: 1 linha por (documento × programa), já distinta.
 
       As colunas de documento são resolvidas dinamicamente via
-      information_schema nas tabelas de origem, porque a ingestão de
+      information_schema nas tabelas de origem (e não nas bronzes, que são
+      view e podem não existir na hora do `dbt compile`), porque a ingestão de
       planilhas não normaliza espaços nem NBSP nos cabeçalhos e o mesmo
       campo vira várias colunas, cada uma com parte dos dados. O padrão
       anterior (ILIKE '%cpf%cnpj%') exigia "cpf" antes de "cnpj" e não casava
@@ -60,21 +63,18 @@ models:
       tempo de compilação e o resultado é pequeno. A view existe no banco, então o conector do
       OpenMetadata a enxerga normalmente.
     config:
-      tags: [silver, agentes, contemplados, meta5]
+      tags: [silver, transferegov, contemplados]
       meta:
         status: Active
-        meta_objetivo: 'Meta 5 — identificadores de contemplados de edital'
         origem_dados: 'relatorio_gestao.planilha_contemplados_lpg + planilha_contemplados_pnab_ciclo_1'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
-            - Certification.Bronze
+            - Certification.Silver
           glossary:
             - MinC.Agentes.Contemplado
-          customProperties:
-            responsavel_negocio: 'Meta 5 - agentes'
     columns:
       - name: id_normalizado
         description: >
@@ -89,7 +89,10 @@ models:
         tests:
           - not_null
       - name: programa_fomento
-        description: Programa de fomento — 'LPG' ou 'PNAB'.
+        description: >
+          Programa da planilha de onde o documento veio — 'LPG'
+          (planilha_contemplados_lpg) ou 'PNAB'
+          (planilha_contemplados_pnab_ciclo_1).
         data_type: text
         meta:
           openmetadata:

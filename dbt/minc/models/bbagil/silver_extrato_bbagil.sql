@@ -1,7 +1,10 @@
 -- Silver bbagil — extrato_bbagil.
 -- Origem: bronze_extrato_bbagil, cópia fiel de bbagil.extrato_bbagil, onde tudo chega como text da ingestão via API.
 -- Tipar é o trabalho desta camada.
--- 42 colunas: 23 tipadas, 19 mantidas como texto.
+-- 42 colunas: 22 tipadas, 20 mantidas como texto.
+-- beneficiarydocumentid fica texto mesmo casando 100% com inteiro: é CPF/CNPJ,
+-- identificador e não número. Como integer perdia o zero à esquerda e estourava
+-- a faixa do tipo em todo CPF acima de 2.147.483.647.
 -- O cast vem do padrão medido no dado (scripts/perfilar_padroes.py),
 -- não do nome da coluna: exige 100% dos valores preenchidos casando.
 select
@@ -20,7 +23,7 @@ select
     {{ bronze_inteiro("cod_ibge") }} as cod_ibge,
     {{ bronze_data("periodo_inicial") }} as periodo_inicial,
     {{ bronze_data("periodo_final") }} as periodo_final,
-    {{ bronze_inteiro("id") }} as id,
+    {{ bronze_inteiro("id", "bigint") }} as id,
     {{ bronze_texto("bookingdate") }} as bookingdate,
     {{ bronze_inteiro("orderindex") }} as orderindex,
     {{ bronze_texto("valuedate") }} as valuedate,
@@ -35,7 +38,7 @@ select
     {{ bronze_inteiro("beneficiarybranchcode") }} as beneficiarybranchcode,
     {{ bronze_inteiro("beneficiaryaccountnumber") }} as beneficiaryaccountnumber,
     {{ bronze_inteiro("beneficiarypersontype") }} as beneficiarypersontype,
-    {{ bronze_inteiro("beneficiarydocumentid") }} as beneficiarydocumentid,
+    {{ bronze_texto("beneficiarydocumentid") }} as beneficiarydocumentid,
     {{ bronze_texto("beneficiaryname") }} as beneficiaryname,
     {{ bronze_booleano("pendingexpenseconciliation") }} as pendingexpenseconciliation,
     {{ bronze_booleano("attachedexpensedocumentindicator") }} as attachedexpensedocumentindicator,

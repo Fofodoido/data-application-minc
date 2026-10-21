@@ -1,5 +1,5 @@
 """Dumper YAML com estilo dbt: strings multilinha em bloco `>` (folded),
-igual ao usado em todo o projeto (ver cultura_em_numeros/schema.yml,
+igual ao usado em todo o projeto (ver data_products/cultura_em_numeros/schema.yml,
 metadata/schema.yml). PyYAML por padrão não faz isso sozinho.
 """
 

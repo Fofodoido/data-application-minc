@@ -22,14 +22,16 @@ Silver; o que cruza fontes é Intermediate; o que está em `gold/` é Gold do
 e a Bronze passa a ser cópia fiel ou `source`.
 
 Decida a camada pelo que o SQL faz. `stg_agentes_pf` filtra e normaliza →
-Silver. `eventos_fomento` une BB Ágil, SALIC e Ancine → Intermediate (virou
-`int_bbagil_salic_ancine_eventos_fomento`). Um
-modelo que faz as duas coisas vira dois.
+Silver. `eventos_fomento` unia BB Ágil, SALIC e Ancine e aplicava as regras
+da Meta 5: virou dois, o cruzamento em `int_ancine_bbagil_salic` e a regra em
+`data_products/cultura_em_numeros/eixo2_meta5_evento_fomento`. Um modelo que
+faz as duas coisas vira dois.
 
 ## Os seis passos, nesta ordem
 
-1. **Pasta e `+schema`.** Crie `models/<fonte>/` (ou `<produto>/`) e declare
-   em `dbt_project.yml`:
+1. **Pasta e `+schema`.** Crie `models/<fonte>/` (ou
+   `models/data_products/<produto>/`, com o bloco aninhado em `data_products:`)
+   e declare em `dbt_project.yml`:
    ```yaml
    <fonte>:
      +schema: <fonte>
@@ -68,4 +70,4 @@ modelo que faz as duas coisas vira dois.
 - **Não deixe a pasta velha pela metade** por mais de um PR. Pasta com dois
   padrões é pior que pasta com um padrão errado.
 - **Não apague a pasta velha enquanto `sources_sac_legado.yml` existir**: três
-  modelos ainda leem o schema `bronze` da ingestão v1 (ADR 0005, HANDOFF.md).
+  modelos ainda leem o schema `bronze` da ingestão v1 (ADR 0005).

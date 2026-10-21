@@ -1,11 +1,14 @@
 {{ config(materialized='table') }}
 
--- Intermediate — grão fino da Meta 5: uma linha por (agente × mecanismo), dizendo
+-- Gold — grão fino da Meta 5: uma linha por (agente × mecanismo), dizendo
 -- quando ele entrou naquele mecanismo e se aquela entrada foi a porta de
--- entrada dele no fomento federal como um todo. TODAS as golds da meta derivam
--- daqui, e é aqui que se olha para auditar um agente específico.
--- Fica na intermediate justamente por isso: é fato em nível de linha, não
--- número de consumo, e gold não deve depender de gold.
+-- entrada dele no fomento federal como um todo. As golds de consumo da meta
+-- derivam daqui, e é aqui que se olha para auditar um agente específico.
+--
+-- É Gold, e não Intermediate, porque não cruza base nenhuma: aplica a
+-- definição de novo entrante (porta de entrada e desempate por mecanismo),
+-- que é regra de negócio da meta (ADR 0010). Lê eixo2_meta5_evento_fomento,
+-- Gold do mesmo produto.
 --
 -- A DEFINIÇÃO QUE IMPORTA: novo entrante é comparação CROSS-MECANISMO. O
 -- primeiro acesso do agente é o menor evento dele em QUALQUER mecanismo
@@ -32,7 +35,7 @@ WITH por_agente_mecanismo AS (
         MIN(ano_inicio_observacao) AS ano_inicio_observacao,
         COUNT(*) AS qtd_eventos,
         SUM(valor) AS valor_total
-    FROM {{ ref('int_bbagil_salic_ancine_eventos_fomento') }}
+    FROM {{ ref('eixo2_meta5_evento_fomento') }}
     GROUP BY beneficiario_documento, programa_fomento, tipo_pessoa
 ),
 

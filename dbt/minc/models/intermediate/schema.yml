@@ -1,34 +1,30 @@
 version: 2
 
-# Intermediate (ADR 0010): cruza fontes, sem regra de negócio final.
+# Intermediate (ADR 0010): só cruza bases, sem regra de negócio final.
 #
-# NOMES: int_<fonte1>_<fonte2>. Quando mais de um modelo cruza as mesmas
-# fontes, o nome ganha o conceito no fim: int_<fontes>_<conceito>
-# (int_bbagil_salic_ancine_eventos_fomento, int_bbagil_salic_ancine_primeiro_acesso).
+# NOMES: int_<fonte1>_<fonte2>_..._<fonteN>, uma intermediate por combinação de
+# fontes, com as fontes em ordem alfabética — assim o mesmo cruzamento não
+# ganha dois nomes.
 models:
-  - name: int_bbagil_salic_ancine_eventos_fomento
+  - name: int_ancine_bbagil_salic
     description: >
-      Camada Intermediate — Meta 5. Espinha unificada: um evento por vez que um
-      agente cultural recebeu recurso de uma política federal de fomento,
-      num formato só. É a tabela que permite perguntar "este agente já havia
-      sido contemplado antes?" acima do mecanismo, que é o que a pergunta da
-      meta exige. Grão: 1 linha por (documento, mecanismo, data, valor).
+      Camada Intermediate. Os eventos em que um agente recebeu recurso, de
+      três fontes numa forma só: saída de dinheiro das contas do BB Ágil
+      (silver_pagamento_bbagil), recibo de captação da Rouanet
+      (silver_legado_sac_captacao_proponente) e captação de projeto
+      audiovisual da Ancine (silver_consulta). Grão: 1 linha por evento da
+      fonte.
 
-      Janelas de observação, muito assimétricas: ROUANET 1993+, AUDIOVISUAL
-      2005+, FSA 2011+, LAB/LPG/PNAB 2023+. Por isso a coluna
-      ano_inicio_observacao, que a gold usa para marcar os anos censurados à
-      esquerda.
-
-      O piso de valor (var limiar_valor_fomento, padrão 375) é aplicado sobre
-      o TOTAL do agente naquele mecanismo, não por transação, e só ao BB Ágil
-      — é lá que existe resíduo de transação que não é repasse de fomento.
-      Rouanet e Ancine não passam pelo piso: lá o evento já é uma captação
-      formal.
+      Nada é descartado nem classificado aqui. Quais eventos contam, a que
+      política cada um pertence e o piso de valor são regra de negócio e
+      ficam na Gold (eixo2_meta5_evento_fomento). Por isso cada linha leva o
+      que a fonte tem para essa decisão — programa_bruto, beneficiario_nome,
+      beneficiario_documento_bruto, descriptionname, tipo_lancamento —, nulo
+      onde a fonte não tem.
     config:
-      tags: [intermediate, agentes, meta5, primeiro_acesso]
+      tags: [intermediate, bbagil, salic, ancine]
       meta:
         status: Active
-        meta_objetivo: 'Meta 5 — espinha de eventos de acesso a fomento federal'
         origem_dados: 'silver_pagamento_bbagil + silver_legado_sac_captacao_proponente + silver_consulta'
         openmetadata:
           domain: Cultura.Fomento Direto
@@ -38,11 +34,24 @@ models:
             - Certification.Silver
           glossary:
             - MinC.Agentes.AgenteCultural
-          customProperties:
-            responsavel_negocio: 'Meta 5 - agentes'
     columns:
+      - name: fonte
+        description: "'BB_AGIL', 'SALIC' ou 'ANCINE'."
+        data_type: text
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['ANCINE', 'BB_AGIL', 'SALIC']
+      - name: programa_bruto
+        description: >
+          O programa como a fonte registra, sem classificação: no BB Ágil o
+          código curto do programa (governmentprogramname, ex.
+          'MINC-LPG-MUNI-AUD'), na Ancine o mecanismo ('FSA', 'ART1',
+          'ART25'...). Nulo no SALIC, onde todo evento é Rouanet.
+        data_type: text
       - name: beneficiario_documento
-        description: CPF (11) ou CNPJ (14) do agente, normalizado com LPAD.
+        description: CPF (11) ou CNPJ (14) de quem recebeu, normalizado com LPAD.
         data_type: text
         meta:
           openmetadata:
@@ -52,23 +61,37 @@ models:
               - MinC.Identificadores.IdentificadorUnico
         tests:
           - not_null
-      - name: programa_fomento
+      - name: beneficiario_documento_bruto
         description: >
-          Mecanismo — 'AUDIOVISUAL', 'FSA', 'LAB', 'LPG', 'PNAB' ou 'ROUANET'.
+          Documento como o BB Ágil devolve, sem zero à esquerda. É onde a Gold
+          reconhece o Banco do Brasil ('191') e o Fundo Nacional de Cultura
+          ('3793086100189'). Nulo nas outras fontes.
         data_type: text
         meta:
           openmetadata:
-            glossary:
-              - MinC.Politicas.LPG
-              - MinC.Politicas.PNAB
-              - MinC.Politicas.Rouanet
+            tags:
+              - PII.Sensitive
+      - name: beneficiario_nome
+        description: >
+          Nome de quem recebeu, quando a fonte traz. No BB Ágil é onde a Gold
+          reconhece repasse a ente público.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.NonSensitive
+      - name: tipo_pessoa
+        description: "'PF' (11 dígitos) ou 'PJ' (14)."
+        data_type: text
         tests:
           - not_null
           - accepted_values:
               arguments:
-                values: ['AUDIOVISUAL', 'FSA', 'LAB', 'LPG', 'PNAB', 'ROUANET']
+                values: ['PF', 'PJ']
       - name: data_evento
-        description: Data em que o recurso chegou ao agente.
+        description: >
+          Data em que o recurso chegou: data do lançamento no BB Ágil, do
+          recibo na Rouanet, da captação na Ancine.
         data_type: date
         tests:
           - not_null
@@ -78,216 +101,54 @@ models:
         tests:
           - not_null
       - name: valor
-        description: Valor do evento, em reais.
+        description: Valor do evento, em reais, como a fonte registra.
         data_type: numeric
-        tests:
-          - not_null
-      - name: fonte
-        description: "'BB_AGIL', 'SALIC' ou 'ANCINE'."
-        data_type: text
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['ANCINE', 'BB_AGIL', 'SALIC']
-      - name: ano_inicio_observacao
+      - name: tipo_lancamento
         description: >
-          Primeiro ano em que a fonte daquele mecanismo enxerga qualquer
-          coisa: 1993 ROUANET, 2005 AUDIOVISUAL, 2011 FSA, 2023 LAB/LPG/PNAB.
-          A gold usa este valor para marcar o ano censurado, em que todo mundo
-          parece estreante porque não existe passado observável.
-        data_type: integer
-        tests:
-          - not_null
-      - name: tipo_pessoa
-        description: "'PF' (11 dígitos) ou 'PJ' (14)."
+          No BB Ágil, 'extrato' ou 'subtransacao' (ver silver_pagamento_bbagil).
+          Nulo nas outras fontes.
         data_type: text
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['PF', 'PJ']
+      - name: descriptionname
+        description: >
+          Descrição do lançamento no extrato do BB Ágil. Nula no sublançamento
+          e nas outras fontes.
+        data_type: text
+      - name: id_plano_acao
+        description: Plano de ação dono da conta, no BB Ágil. Nulo nas outras fontes.
+        data_type: integer
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Identificadores.IdPlanoAcao
+      - name: pronac
+        description: PRONAC do projeto, no SALIC. Nulo nas outras fontes.
+        data_type: text
+      - name: no_salic
+        description: >
+          Número do projeto no SALIC anotado pela Ancine. Nulo nas outras
+          fontes.
+        data_type: text
 
-  - name: int_bbagil_salic_ancine_primeiro_acesso
+  - name: int_ancine_bbagil_salic_transferegov
     description: >
-      Camada Intermediate — Meta 5. Grão fino do indicador de novos entrantes: uma
-      linha por (agente × mecanismo), com a data em que ele entrou naquele
-      mecanismo e se aquela entrada foi a porta de entrada dele no fomento
-      federal como um todo. Substitui primeiro_pagamento_bancario, que
-      comparava datas apenas entre LPG e PNAB — num universo de dois
-      programas, "não é novo entrante" só conseguia significar "recebeu o
-      outro programa antes", e quem aparecia num programa só era sempre
-      classificado como novo. Aqui a comparação é cross-mecanismo de
-      verdade, e inclui a Rouanet desde 1993.
-
-      Exatamente uma linha por agente tem eh_porta_de_entrada = true;
-      empates de data no mesmo dia são desempatados por ordem de mecanismo
-      (ROUANET, AUDIOVISUAL, FSA, LAB, LPG, PNAB) para que ninguém conte duas
-      vezes.
-    config:
-      tags: [intermediate, agentes, meta5, primeiro_acesso]
-      meta:
-        status: Active
-        meta_objetivo: 'Meta 5 — Primeiro Acesso ao Fomento Federal (por agente)'
-        origem_dados: 'int_bbagil_salic_ancine_eventos_fomento (BB Ágil + SALIC + Ancine)'
-        openmetadata:
-          domain: Cultura.Fomento Direto
-          tier: Tier.Tier1
-          owner: minc-data-engineering
-          tags:
-            - Certification.Silver
-          glossary:
-            - MinC.Agentes.AgenteCultural
-            - MinC.Agentes.PrimeiroAcesso
-          customProperties:
-            responsavel_negocio: 'Meta 5 - agentes'
-    columns:
-      - name: beneficiario_documento
-        description: >
-          CPF (11) ou CNPJ (14) do agente, normalizado com LPAD. Chave de
-          ligação com silver_planilha_contemplados e com as demais fontes de
-          evento. NÃO é pseudonimizado — sai em claro, como toda coluna de
-          documento neste domínio hoje.
-        data_type: text
-        meta:
-          openmetadata:
-            tags:
-              - PII.Sensitive
-            glossary:
-              - MinC.Identificadores.IdentificadorUnico
-        tests:
-          - not_null
-      - name: programa_fomento
-        description: >
-          Mecanismo de fomento — 'AUDIOVISUAL', 'FSA', 'LAB', 'LPG', 'PNAB'
-          ou 'ROUANET'.
-        data_type: text
-        meta:
-          openmetadata:
-            glossary:
-              - MinC.Politicas.LPG
-              - MinC.Politicas.PNAB
-              - MinC.Politicas.Rouanet
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['AUDIOVISUAL', 'FSA', 'LAB', 'LPG', 'PNAB', 'ROUANET']
-      - name: tipo_pessoa
-        description: "'PF' quando o documento tem 11 dígitos, 'PJ' quando tem 14."
-        data_type: text
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['PF', 'PJ']
-      - name: data_primeiro_acesso_mecanismo
-        description: Primeiro evento observado do agente neste mecanismo.
-        data_type: date
-        tests:
-          - not_null
-      - name: data_ultimo_acesso_mecanismo
-        description: >
-          Último evento observado do agente neste mecanismo. Não entra no
-          indicador de primeiro acesso; serve para medir por quanto tempo o
-          agente permaneceu naquele mecanismo.
-        data_type: date
-        tests:
-          - not_null
-      - name: ano_entrada_mecanismo
-        description: >
-          Ano de data_primeiro_acesso_mecanismo. É o ano de entrada NESTE
-          mecanismo — não confundir com ano_primeiro_acesso_geral, que é o ano
-          de entrada no fomento federal. Os dois coincidem só na linha em que
-          eh_porta_de_entrada é verdadeiro.
-        data_type: integer
-        tests:
-          - not_null
-      - name: data_primeiro_acesso_geral
-        description: >
-          Primeiro evento do agente em QUALQUER mecanismo. É a data que
-          define se ele é novo entrante.
-        data_type: date
-        tests:
-          - not_null
-      - name: ano_primeiro_acesso_geral
-        description: Ano de data_primeiro_acesso_geral.
-        data_type: integer
-        tests:
-          - not_null
-      - name: qtd_mecanismos_agente
-        description: Em quantos mecanismos distintos o agente já recebeu recurso.
-        data_type: bigint
-        tests:
-          - not_null
-      - name: qtd_eventos
-        description: >
-          Quantos eventos de fomento o agente teve neste mecanismo. Um
-          pagamento parcelado conta várias vezes — é contagem de lançamento,
-          não de projeto nem de contrato.
-        data_type: bigint
-        tests:
-          - not_null
-      - name: valor_total
-        description: >
-          Soma dos valores dos eventos do agente neste mecanismo, em reais.
-          Já reflete o piso de int_bbagil_salic_ancine_eventos_fomento (var limiar_valor_fomento),
-          que descarta o agente inteiro do mecanismo quando o total fica
-          abaixo dele — nenhuma linha aqui tem total abaixo do piso no BB Ágil.
-        data_type: numeric
-        tests:
-          - not_null
-      - name: eh_porta_de_entrada
-        description: >
-          Verdadeiro no mecanismo pelo qual o agente entrou no fomento
-          federal. Exatamente uma linha por agente.
-        data_type: boolean
-        meta:
-          openmetadata:
-            glossary:
-              - MinC.Agentes.PrimeiroAcesso
-        tests:
-          - not_null
-      - name: categoria_primeiro_acesso
-        description: "'Sim' quando esta linha é a porta de entrada do agente; 'Não' caso contrário."
-        data_type: text
-        meta:
-          openmetadata:
-            glossary:
-              - MinC.Agentes.PrimeiroAcesso
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['Sim', 'Não']
-      - name: entrada_em_ano_censurado
-        description: >
-          Verdadeiro quando a entrada caiu no primeiro ano observável daquele
-          mecanismo (2023 para LAB/LPG/PNAB). Descritivo: para a LAB isso é
-          corte de janela, para LPG e PNAB é o ano de nascimento do programa —
-          ver ano_censurado em eixo2_meta5_primeiro_acesso_anual, que separa os dois.
-        data_type: boolean
-        tests:
-          - not_null
-
-  - name: int_relatorio_gestao_primeiro_acesso_contemplados
-    description: >
-      Camada Intermediate — Meta 5. Cruza as listas oficiais de contemplados
-      (silver_planilha_contemplados) com a classificação de primeiro acesso
-      (int_bbagil_salic_ancine_primeiro_acesso). Uma linha por (agente ×
-      mecanismo) contemplado com evento observável. Desabilitado junto com
+      Camada Intermediate. Os eventos de int_ancine_bbagil_salic, cada um
+      marcado com as listas oficiais de contemplados de edital do
+      TransfereGov (silver_planilha_contemplados) em que o documento aparece.
+      Grão: o de int_ancine_bbagil_salic, 1 linha por evento. Só cruza; a
+      regra de primeiro acesso dos contemplados fica em
+      eixo2_meta5_primeiro_acesso_contemplados. Desabilitado junto com
       silver_planilha_contemplados.
     config:
-      tags: [intermediate, meta5, contemplados, primeiro_acesso]
+      tags: [intermediate, bbagil, salic, ancine, transferegov, contemplados]
     columns:
-      - name: programa_fomento
-        description: Programa de fomento — 'LPG' ou 'PNAB'.
-        data_type: text
-      - name: beneficiario_documento
-        description: CPF (11) ou CNPJ (14) normalizado do contemplado.
-        data_type: text
-      - name: categoria_primeiro_acesso
+      - name: contemplado_lpg
         description: >
-          'Sim' quando foi por este mecanismo que o agente entrou no fomento
-          federal; 'Não' quando já havia recebido recurso antes.
-        data_type: text
+          Verdadeiro quando o documento está na lista de contemplados da LPG.
+          Nulo, e não falso, quando não está: ausência na planilha não é
+          evidência.
+        data_type: boolean
+      - name: contemplado_pnab
+        description: >
+          Verdadeiro quando o documento está na lista de contemplados da PNAB
+          (ciclo 1). Nulo quando não está.
+        data_type: boolean

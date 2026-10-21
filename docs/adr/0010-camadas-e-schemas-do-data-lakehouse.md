@@ -1,6 +1,7 @@
 # ADR 0010 — Cinco camadas, schema por fonte até a Intermediate e um schema por produto na Gold
 
-- **Data:** 2026-10-06
+- **Data:** 2026-10-06 (revisto em 2026-10-21: `data_products/`, nome da
+  Intermediate, Gold lendo Gold do mesmo produto)
 - **Status:** aceito
 - **Escopo:** camadas, schemas e nomenclatura do projeto dbt e das DAGs
 - **Desenho:** [`docs/arquitetura/modelagem-dados-minc.png`](../arquitetura/modelagem-dados-minc.png)
@@ -53,8 +54,8 @@ separada por produto.
 | Raw | — | — | — (`source`) | `raw/salic/agentes/` |
 | Bronze | `<fonte>` | `bronze_<entidade>` | `<fonte>/bronze_<entidade>.sql` | `salic.bronze_agentes_agentes` |
 | Silver | `<fonte>` | `silver_<entidade>` | `<fonte>/silver_<entidade>.sql` | `salic.silver_agentes_agentes` |
-| Intermediate | `intermediate` | `int_<fonte1>_<fonte2>` | `intermediate/int_<fonte1>_<fonte2>.sql` | `intermediate.int_salic_transferegov` |
-| Gold | `<produto>` | `<nome>`, sem prefixo | `<produto>/<nome>.sql` | `cultura_em_numeros.eixo2_meta3_fct_pagamento_profissional_rouanet` |
+| Intermediate | `intermediate` | `int_<fonte1>_..._<fonteN>` | `intermediate/int_<fonte1>_..._<fonteN>.sql` | `intermediate.int_salic_transferegov` |
+| Gold | `<produto>` | `<nome>`, sem prefixo | `data_products/<produto>/<nome>.sql` | `cultura_em_numeros.eixo2_meta3_fct_pagamento_profissional_rouanet` |
 
 - **O nome do arquivo é o nome da tabela.** A fonte fica na pasta e no
   schema, não no nome. Não há `alias`: `bronze_agentes_agentes.sql` vira
@@ -65,6 +66,11 @@ separada por produto.
   o nome da tabela extraída: `controle_extracao_bbagil_extrato`.
 - Fonte com uma única entidade usa o nome da fonte como entidade:
   `transferegov/bronze_transferegov.sql`.
+- **A Intermediate leva no nome as fontes que cruza, em ordem alfabética, e
+  nada mais**: `int_ancine_bbagil_salic`. Uma intermediate por combinação de
+  fontes; a ordem fixa impede que o mesmo cruzamento ganhe dois nomes.
+  Conceito no nome (`int_<fontes>_eventos`) é sinal de que o modelo aplica
+  regra de produto e pertence à Gold.
 - **A Gold não leva prefixo de camada nem de produto**: a pasta e o schema já
   dizem o produto. **Dentro da pasta, cada produto nomeia suas tabelas do
   jeito que o produto precisa.** O Cultura em Números leva eixo e meta no
@@ -81,9 +87,12 @@ separada por produto.
 
 ### Pastas no projeto dbt
 
-O desenho fixa schema e tabela, não pasta. **Uma pasta por fonte, uma por
-produto, e uma para a Intermediate**, sem subpasta de camada: a camada está
-no prefixo do arquivo. Cada pasta tem o próprio `+schema`.
+O desenho fixa schema e tabela, não pasta. **Uma pasta por fonte, uma para a
+Intermediate e, dentro de `data_products/`, uma por produto**, sem subpasta
+de camada: a camada está no prefixo do arquivo. Cada pasta de fonte e cada
+produto tem o próprio `+schema`. `data_products/` é só organização no
+repositório — não vira schema —, e é ela que distingue produto de fonte:
+qualquer subpasta dela é um produto, sem lista a manter.
 
 ```text
 dbt/minc/models/
@@ -97,8 +106,16 @@ dbt/minc/models/
 │   └── silver_controle_extracao_bbagil_extrato.sql
 ├── intermediate/
 │   └── int_salic_transferegov.sql
-└── cultura_em_numeros/
-    └── eixo2_meta3_fct_pagamento_profissional_rouanet.sql
+└── data_products/
+    └── cultura_em_numeros/
+        └── eixo2_meta3_fct_pagamento_profissional_rouanet.sql
+```
+
+```yaml
+# dbt_project.yml — o schema do produto é explícito, a pasta data_products não
+data_products:
+  cultura_em_numeros:
+    +schema: cultura_em_numeros
 ```
 
 Pasta de fonte contém só `bronze_*` e `silver_*`. Pasta de produto contém
@@ -114,7 +131,11 @@ regra está na pasta errada.
    contemplado" não entra em Silver nem em Intermediate.
 4. **Bronze lê exatamente uma `source` e nada mais.** Sem `join`, sem
    `where`, sem cast.
-5. **Gold referencia Intermediate ou Silver.** Nunca Bronze, nunca `source`.
+5. **Gold referencia Intermediate, Silver ou Gold do mesmo produto.** Nunca
+   Bronze, nunca `source`, nunca Gold de outro produto. Gold lendo Gold do
+   próprio produto é como a regra de negócio que várias golds de consumo
+   compartilham fica escrita uma vez só (na Meta 5,
+   `eixo2_meta5_evento_fomento` diz quem conta e as demais leem dela).
 6. **Dimensão comum** (tempo, território) é Intermediate, para ser
    compartilhada entre produtos. A lista completa e o mecanismo de
    compartilhamento ficam em aberto.
@@ -219,7 +240,7 @@ modelo a modelo na migração:
 | `salic_dbt/core`, `meta3`, `meta4`, `meta5` | Silver do `salic` quando não cruzam; Intermediate quando cruzam |
 | `cotas_dbt/bronze/stg_*` (tipam e filtram) | Silver da fonte correspondente (`relatorio_gestao`, `bbagil`) |
 | `cotas_dbt/silver`, `agentes_dbt/silver` (cruzam fontes) | Intermediate |
-| `cotas_dbt/gold`, `agentes_dbt/gold` | `models/cultura_em_numeros/`, na convenção desse produto (eixo e meta no nome) |
+| `cotas_dbt/gold`, `agentes_dbt/gold` | `models/data_products/cultura_em_numeros/`, na convenção desse produto (eixo e meta no nome) |
 | `mapas_dbt/silver` | Já é Silver; vai para `models/mapas/silver_<entidade>.sql`, e o `alias` que hoje faz esse papel sai |
 | `transferegov_bronze`, `bacen_bronze`, `ibge_sidra_bronze`, `bbagil_bronze` (tipam) | Silver da fonte |
 

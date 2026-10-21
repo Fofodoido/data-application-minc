@@ -33,9 +33,10 @@ RAIZ = Path(__file__).resolve().parents[4]
 PROJETO = RAIZ / "dbt" / "minc"
 MODELS = PROJETO / "models"
 
-# Pastas de produto de dados (Gold). Qualquer outra pasta é fonte, exceto
-# `intermediate`. Produto novo entra aqui no mesmo PR que cria a pasta.
-PRODUTOS = {"cultura_em_numeros", "sefli", "patrimonio_cultural"}
+# Produtos de dados (Gold) moram em `data_products/<produto>/`: o produto é a
+# subpasta, sem lista a manter. Qualquer outra pasta de primeiro nível é
+# fonte, exceto `intermediate`.
+DATA_PRODUCTS = "data_products"
 INTERMEDIATE = "intermediate"
 
 RE_REF = re.compile(r"""\{\{\s*ref\(\s*['"]([^'"]+)['"]\s*\)\s*\}\}""")
@@ -51,7 +52,8 @@ RE_FALSE_POR_AUSENCIA = re.compile(r"coalesce\s*\([^)]*\bfalse\b[^)]*\)", re.I)
 @dataclass
 class Modelo:
     caminho: Path
-    pasta: str
+    pasta: str  # a fonte, `intermediate` ou, em data_products/, o produto
+    produto: bool
     nome: str
     camada: str  # bronze | silver | intermediate | gold | fora
     refs: list[str]
@@ -72,10 +74,12 @@ class Relatorio:
         self.avisos[regra].append(msg)
 
 
-def _camada(pasta: str, nome: str) -> str:
+def _camada(pasta: str, produto: bool, nome: str) -> str:
     if pasta == INTERMEDIATE:
         return "intermediate" if nome.startswith("int_") else "fora"
-    if pasta in PRODUTOS:
+    if pasta == DATA_PRODUCTS:
+        return "fora"  # arquivo solto em data_products/, fora de um produto
+    if produto:
         if nome.startswith(("bronze_", "silver_", "int_")):
             return "fora"
         return "gold"
@@ -91,13 +95,18 @@ def carregar(caminho: Path) -> Modelo:
     corpo = RE_COMENTARIO.sub("", texto)
     corpo = RE_CONFIG.sub("", corpo)
     rel = caminho.relative_to(MODELS)
-    pasta = rel.parts[0] if len(rel.parts) > 1 else ""
+    produto = rel.parts[0] == DATA_PRODUCTS and len(rel.parts) > 2
+    if produto:
+        pasta = rel.parts[1]
+    else:
+        pasta = rel.parts[0] if len(rel.parts) > 1 else ""
     nome = caminho.stem
     return Modelo(
         caminho=caminho,
         pasta=pasta,
+        produto=produto,
         nome=nome,
-        camada=_camada(pasta, nome),
+        camada=_camada(pasta, produto, nome),
         refs=RE_REF.findall(corpo),
         sources=RE_SOURCE.findall(corpo),
         corpo=corpo,
@@ -140,7 +149,8 @@ def escopo_caminhos(args: list[str]) -> list[Path]:
 
 
 def schemas_do_projeto() -> dict[str, str]:
-    """pasta -> +schema declarado no dbt_project.yml (só o primeiro nível)."""
+    """pasta -> +schema declarado no dbt_project.yml: o primeiro nível e, dentro
+    de `data_products`, cada produto."""
     try:
         import yaml
     except ImportError:
@@ -151,6 +161,9 @@ def schemas_do_projeto() -> dict[str, str]:
     for pasta, conf in modelos.items():
         if isinstance(conf, dict) and "+schema" in conf:
             saida[pasta] = str(conf["+schema"])
+    for produto, conf in (modelos.get(DATA_PRODUCTS) or {}).items():
+        if isinstance(conf, dict) and "+schema" in conf:
+            saida[produto] = str(conf["+schema"])
     return saida
 
 
@@ -159,13 +172,13 @@ def sugerir_destino(m: Modelo, indice: dict[str, Modelo]) -> str:
     certa depende do que o SQL faz, e isso quem decide é quem migra."""
     pastas_ref = {indice[r].pasta for r in m.refs if r in indice}
     fontes_src = {s[0] for s in m.sources}
-    if m.pasta in PRODUTOS:
+    if m.produto:
         return "já está em pasta de produto; só o nome está fora do padrão"
     if m.refs and len(pastas_ref | fontes_src) > 1:
         n = len(pastas_ref | fontes_src)
         return f"cruza {n} origens → intermediate/int_<f1>_<f2>.sql"
     if "gold" in m.caminho.parts:
-        return "é gold → <produto>/<nome>.sql, convenção do produto"
+        return f"é gold → {DATA_PRODUCTS}/<produto>/<nome>.sql, convenção do produto"
     if m.sources and not m.refs:
         return (
             "lê só source → silver_<entidade>.sql na pasta da fonte (tipa) "
@@ -175,7 +188,8 @@ def sugerir_destino(m: Modelo, indice: dict[str, Modelo]) -> str:
 
 
 def _regra_r1(m: Modelo, rel: str, caminho: Path, r: Relatorio) -> None:
-    if len(caminho.relative_to(MODELS).parts) != 2:
+    # fonte/arquivo.sql e intermediate/arquivo.sql; data_products/<produto>/arquivo.sql
+    if len(caminho.relative_to(MODELS).parts) != (3 if m.produto else 2):
         r.viola(
             "R1 pasta e nome", f"{rel}: subpasta na fonte/produto; arquivos são planos"
         )
@@ -232,21 +246,29 @@ def _regra_consome_silver(
     refs: dict[str, Modelo | None],
     r: Relatorio,
 ) -> None:
-    """R4 (intermediate) e R5 (gold): só referenciam silver ou intermediate."""
+    """R4 (intermediate) e R5 (gold): só referenciam silver ou intermediate.
+    A gold também lê gold do MESMO produto: é onde a regra de negócio que as
+    golds de consumo compartilham fica escrita uma vez só."""
     if m.sources:
         r.viola(regra, f"{rel}: {camada} com source()")
     for ref, alvo in refs.items():
-        if alvo is not None and alvo.camada not in ("silver", "intermediate"):
-            r.viola(
-                regra,
-                f"{rel}: ref('{ref}') é {alvo.camada}; {camada} lê só silver/int",
-            )
+        if alvo is None or alvo.camada in ("silver", "intermediate"):
+            continue
+        if camada == "gold" and alvo.camada == "gold" and alvo.pasta == m.pasta:
+            continue
+        r.viola(
+            regra,
+            f"{rel}: ref('{ref}') é {alvo.camada}"
+            + (f" do produto `{alvo.pasta}`" if alvo.camada == "gold" else "")
+            + f"; {camada} lê só silver/int"
+            + (" ou gold do próprio produto" if camada == "gold" else ""),
+        )
 
 
 def _regra_schema(pastas: set[str], r: Relatorio) -> None:
     """R7 — o +schema da pasta é o nome da pasta."""
     schemas = schemas_do_projeto()
-    for pasta in sorted(p for p in pastas if p):
+    for pasta in sorted(p for p in pastas if p and p != DATA_PRODUCTS):
         declarado = schemas.get(pasta)
         if declarado is None:
             r.viola("R7 schema", f"models/{pasta}: sem `+schema` no dbt_project.yml")

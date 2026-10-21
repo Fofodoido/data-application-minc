@@ -121,8 +121,8 @@ O que não se improvisa aqui:
 Projeto em `dbt/minc/`, perfil `minc`. Modelo novo segue o
 [ADR 0010](../../../docs/adr/0010-camadas-e-schemas-do-data-lakehouse.md) — pasta
 por fonte (`bbagil/`, `salic/`, `ancine/`, `mapas/`…) com `bronze_*` e `silver_*`,
-`intermediate/` com `int_*` e uma pasta por produto (`cultura_em_numeros/`), schema
-igual ao nome da pasta. Use a skill `arquitetura-lakehouse-minc` antes de criar ou
+`intermediate/` com `int_*` e uma pasta por produto em `data_products/`
+(`data_products/cultura_em_numeros/`), schema igual ao nome da pasta. Use a skill `arquitetura-lakehouse-minc` antes de criar ou
 mover modelo. A Meta 5 já está nessa estrutura; o legado por domínio ainda existe:
 
 | Domínio legado | Schema | Assunto |

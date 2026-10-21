@@ -5,7 +5,286 @@ version: 2
 # CONVENÇÃO DE NOME DESTE PRODUTO: eixo<N>_meta<M>_<nome>, porque é por eixo e
 # meta que a coordenação procura um indicador. A Meta 5 (novos entrantes no
 # fomento federal) é do eixo 2.
+#
+# A regra de negócio da Meta 5 vive toda aqui (ADR 0010). Duas golds são a base
+# das outras e não respondem pergunta sozinhas: eixo2_meta5_evento_fomento
+# (quem conta, por fonte) e eixo2_meta5_primeiro_acesso_agente (a definição de
+# novo entrante). Gold lê Gold só dentro do mesmo produto.
 models:
+  - name: eixo2_meta5_evento_fomento
+    description: >
+      Camada Gold — Meta 5. Espinha do indicador: um evento por vez que um
+      agente cultural recebeu recurso de uma política federal de fomento, já
+      com a política classificada. É a tabela que permite perguntar "este
+      agente já havia sido contemplado antes?" acima do mecanismo, que é o
+      que a pergunta da meta exige. Grão: 1 linha por (documento, mecanismo,
+      data, valor).
+
+      Lê int_ancine_bbagil_salic, que só junta as fontes, e concentra a regra
+      de negócio de quem conta (ADR 0010): no BB Ágil, fora repasse a ente
+      público, devolução ao FNC, transferência ao Banco do Brasil e
+      lançamento interno, com a política (LPG, PNAB, LAB) derivada do código
+      do programa; na Ancine, só FSA e o fomento federal ao audiovisual
+      (fora ART25/ART18, que já entram pelo SALIC); na Rouanet e na Ancine,
+      só valor positivo.
+
+      Janelas de observação, muito assimétricas: ROUANET 1993+, AUDIOVISUAL
+      2005+, FSA 2011+, LAB/LPG/PNAB 2023+. Por isso a coluna
+      ano_inicio_observacao, que a gold anual usa para marcar os anos
+      censurados à esquerda.
+
+      O piso de valor (var limiar_valor_fomento, padrão 375) é aplicado sobre
+      o TOTAL do agente naquele mecanismo, não por transação, e só ao BB Ágil
+      — é lá que existe resíduo de transação que não é repasse de fomento.
+    config:
+      tags: [gold, agentes, meta5, primeiro_acesso]
+      meta:
+        status: Active
+        meta_objetivo: 'Meta 5 — espinha de eventos de acesso a fomento federal'
+        origem_dados: 'int_ancine_bbagil_salic'
+        openmetadata:
+          domain: Cultura.Fomento Direto
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+          tags:
+            - Certification.Gold
+          glossary:
+            - MinC.Agentes.AgenteCultural
+          customProperties:
+            responsavel_negocio: 'Meta 5 - agentes'
+    columns:
+      - name: beneficiario_documento
+        description: CPF (11) ou CNPJ (14) do agente, normalizado com LPAD.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+            glossary:
+              - MinC.Identificadores.IdentificadorUnico
+        tests:
+          - not_null
+      - name: programa_fomento
+        description: >
+          Mecanismo — 'AUDIOVISUAL', 'FSA', 'LAB', 'LPG', 'PNAB' ou 'ROUANET'.
+        data_type: text
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Politicas.LPG
+              - MinC.Politicas.PNAB
+              - MinC.Politicas.Rouanet
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['AUDIOVISUAL', 'FSA', 'LAB', 'LPG', 'PNAB', 'ROUANET']
+      - name: data_evento
+        description: Data em que o recurso chegou ao agente.
+        data_type: date
+        tests:
+          - not_null
+      - name: ano_evento
+        description: Ano civil de data_evento.
+        data_type: integer
+        tests:
+          - not_null
+      - name: valor
+        description: Valor do evento, em reais.
+        data_type: numeric
+        tests:
+          - not_null
+      - name: fonte
+        description: "'BB_AGIL', 'SALIC' ou 'ANCINE'."
+        data_type: text
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['ANCINE', 'BB_AGIL', 'SALIC']
+      - name: ano_inicio_observacao
+        description: >
+          Primeiro ano em que a fonte daquele mecanismo enxerga qualquer
+          coisa: 1993 ROUANET, 2005 AUDIOVISUAL, 2011 FSA, 2023 LAB/LPG/PNAB.
+          A gold usa este valor para marcar o ano censurado, em que todo mundo
+          parece estreante porque não existe passado observável.
+        data_type: integer
+        tests:
+          - not_null
+      - name: tipo_pessoa
+        description: "'PF' (11 dígitos) ou 'PJ' (14)."
+        data_type: text
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['PF', 'PJ']
+
+  - name: eixo2_meta5_primeiro_acesso_agente
+    description: >
+      Camada Gold — Meta 5. Grão fino do indicador de novos entrantes: uma
+      linha por (agente × mecanismo), com a data em que ele entrou naquele
+      mecanismo e se aquela entrada foi a porta de entrada dele no fomento
+      federal como um todo. Substitui primeiro_pagamento_bancario, que
+      comparava datas apenas entre LPG e PNAB — num universo de dois
+      programas, "não é novo entrante" só conseguia significar "recebeu o
+      outro programa antes", e quem aparecia num programa só era sempre
+      classificado como novo. Aqui a comparação é cross-mecanismo de
+      verdade, e inclui a Rouanet desde 1993.
+
+      Exatamente uma linha por agente tem eh_porta_de_entrada = true;
+      empates de data no mesmo dia são desempatados por ordem de mecanismo
+      (ROUANET, AUDIOVISUAL, FSA, LAB, LPG, PNAB) para que ninguém conte duas
+      vezes.
+
+      É Gold, e não Intermediate, porque não cruza base: aplica a definição
+      de novo entrante. Lê eixo2_meta5_evento_fomento, Gold do mesmo produto.
+    config:
+      tags: [gold, agentes, meta5, primeiro_acesso]
+      meta:
+        status: Active
+        meta_objetivo: 'Meta 5 — Primeiro Acesso ao Fomento Federal (por agente)'
+        origem_dados: 'eixo2_meta5_evento_fomento'
+        openmetadata:
+          domain: Cultura.Fomento Direto
+          tier: Tier.Tier1
+          owner: minc-data-engineering
+          tags:
+            - Certification.Gold
+          glossary:
+            - MinC.Agentes.AgenteCultural
+            - MinC.Agentes.PrimeiroAcesso
+          customProperties:
+            responsavel_negocio: 'Meta 5 - agentes'
+    columns:
+      - name: beneficiario_documento
+        description: >
+          CPF (11) ou CNPJ (14) do agente, normalizado com LPAD. Chave de
+          ligação com a lista de contemplados e com as demais fontes de
+          evento. NÃO é pseudonimizado — sai em claro, como toda coluna de
+          documento neste domínio hoje.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+            glossary:
+              - MinC.Identificadores.IdentificadorUnico
+        tests:
+          - not_null
+      - name: programa_fomento
+        description: >
+          Mecanismo de fomento — 'AUDIOVISUAL', 'FSA', 'LAB', 'LPG', 'PNAB'
+          ou 'ROUANET'.
+        data_type: text
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Politicas.LPG
+              - MinC.Politicas.PNAB
+              - MinC.Politicas.Rouanet
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['AUDIOVISUAL', 'FSA', 'LAB', 'LPG', 'PNAB', 'ROUANET']
+      - name: tipo_pessoa
+        description: "'PF' quando o documento tem 11 dígitos, 'PJ' quando tem 14."
+        data_type: text
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['PF', 'PJ']
+      - name: data_primeiro_acesso_mecanismo
+        description: Primeiro evento observado do agente neste mecanismo.
+        data_type: date
+        tests:
+          - not_null
+      - name: data_ultimo_acesso_mecanismo
+        description: >
+          Último evento observado do agente neste mecanismo. Não entra no
+          indicador de primeiro acesso; serve para medir por quanto tempo o
+          agente permaneceu naquele mecanismo.
+        data_type: date
+        tests:
+          - not_null
+      - name: ano_entrada_mecanismo
+        description: >
+          Ano de data_primeiro_acesso_mecanismo. É o ano de entrada NESTE
+          mecanismo — não confundir com ano_primeiro_acesso_geral, que é o ano
+          de entrada no fomento federal. Os dois coincidem só na linha em que
+          eh_porta_de_entrada é verdadeiro.
+        data_type: integer
+        tests:
+          - not_null
+      - name: data_primeiro_acesso_geral
+        description: >
+          Primeiro evento do agente em QUALQUER mecanismo. É a data que
+          define se ele é novo entrante.
+        data_type: date
+        tests:
+          - not_null
+      - name: ano_primeiro_acesso_geral
+        description: Ano de data_primeiro_acesso_geral.
+        data_type: integer
+        tests:
+          - not_null
+      - name: qtd_mecanismos_agente
+        description: Em quantos mecanismos distintos o agente já recebeu recurso.
+        data_type: bigint
+        tests:
+          - not_null
+      - name: qtd_eventos
+        description: >
+          Quantos eventos de fomento o agente teve neste mecanismo. Um
+          pagamento parcelado conta várias vezes — é contagem de lançamento,
+          não de projeto nem de contrato.
+        data_type: bigint
+        tests:
+          - not_null
+      - name: valor_total
+        description: >
+          Soma dos valores dos eventos do agente neste mecanismo, em reais.
+          Já reflete o piso de eixo2_meta5_evento_fomento (var limiar_valor_fomento),
+          que descarta o agente inteiro do mecanismo quando o total fica
+          abaixo dele — nenhuma linha aqui tem total abaixo do piso no BB Ágil.
+        data_type: numeric
+        tests:
+          - not_null
+      - name: eh_porta_de_entrada
+        description: >
+          Verdadeiro no mecanismo pelo qual o agente entrou no fomento
+          federal. Exatamente uma linha por agente.
+        data_type: boolean
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Agentes.PrimeiroAcesso
+        tests:
+          - not_null
+      - name: categoria_primeiro_acesso
+        description: "'Sim' quando esta linha é a porta de entrada do agente; 'Não' caso contrário."
+        data_type: text
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Agentes.PrimeiroAcesso
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Sim', 'Não']
+      - name: entrada_em_ano_censurado
+        description: >
+          Verdadeiro quando a entrada caiu no primeiro ano observável daquele
+          mecanismo (2023 para LAB/LPG/PNAB). Descritivo: para a LAB isso é
+          corte de janela, para LPG e PNAB é o ano de nascimento do programa —
+          ver ano_censurado em eixo2_meta5_primeiro_acesso_anual, que separa os dois.
+        data_type: boolean
+        tests:
+          - not_null
+
   - name: eixo2_meta5_primeiro_acesso_anual
     description: >
       Camada Gold — Meta 5. A série que responde às perguntas 1, 2.1 e 2.2:
@@ -26,7 +305,7 @@ models:
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — Percentual anual de proponentes de primeiro acesso'
-        origem_dados: 'int_bbagil_salic_ancine_eventos_fomento + int_bbagil_salic_ancine_primeiro_acesso'
+        origem_dados: 'eixo2_meta5_evento_fomento + eixo2_meta5_primeiro_acesso_agente'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier1
@@ -122,7 +401,7 @@ models:
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — Trajetória entre fomento direto e Rouanet'
-        origem_dados: 'int_bbagil_salic_ancine_primeiro_acesso'
+        origem_dados: 'eixo2_meta5_primeiro_acesso_agente'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier1
@@ -224,7 +503,7 @@ models:
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — Conversão do fomento direto para a Rouanet, por coorte'
-        origem_dados: 'int_bbagil_salic_ancine_primeiro_acesso'
+        origem_dados: 'eixo2_meta5_primeiro_acesso_agente'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier1
@@ -325,7 +604,7 @@ models:
       PNAB), em vez de a todo agente visto recebendo dinheiro. Grão: 1 linha
       por (programa × categoria de primeiro acesso).
 
-      A classificação vem de int_bbagil_salic_ancine_primeiro_acesso, então já é
+      A classificação vem de eixo2_meta5_primeiro_acesso_agente, então já é
       cross-mecanismo e já considera a Rouanet desde 1993.
 
       Cobertura parcial e medida: a interseção entre lista de contemplados e
@@ -340,7 +619,7 @@ models:
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — Novos Entrantes entre contemplados de edital'
-        origem_dados: 'int_bbagil_salic_ancine_primeiro_acesso + silver_planilha_contemplados'
+        origem_dados: 'eixo2_meta5_primeiro_acesso_agente + int_ancine_bbagil_salic_transferegov'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier1

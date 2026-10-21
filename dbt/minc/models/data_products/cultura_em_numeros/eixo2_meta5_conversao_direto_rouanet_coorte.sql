@@ -24,7 +24,7 @@
 --
 -- LEITURA DO NUMERADOR: 'acessou a Rouanet' aqui é captação real de recurso,
 -- a mesma definição de evento usada no resto da meta (ver
--- silver_legado_sac_captacao_proponente) — não é projeto protocolado nem aprovado. Um
+-- eixo2_meta5_evento_fomento) — não é projeto protocolado nem aprovado. Um
 -- agente que submeteu projeto e não captou não conta como convertido.
 
 WITH agente AS (
@@ -35,7 +35,7 @@ WITH agente AS (
         MIN(data_primeiro_acesso_geral) AS data_entrada,
         MIN(data_primeiro_acesso_mecanismo)
             FILTER (WHERE programa_fomento = 'ROUANET') AS data_rouanet
-    FROM {{ ref('int_bbagil_salic_ancine_primeiro_acesso') }}
+    FROM {{ ref('eixo2_meta5_primeiro_acesso_agente') }}
     GROUP BY beneficiario_documento, tipo_pessoa
 ),
 

@@ -21,43 +21,36 @@ models:
 
   - name: silver_consulta
     description: >
-      Camada Silver — um evento por captação de projeto audiovisual registrada
-      pela Ancine (`ancine.consulta`), no mesmo formato dos recibos da Rouanet e
-      dos pagamentos do BB Ágil, para entrar em int_bbagil_salic_ancine_eventos_fomento.
+      Camada Silver — uma linha por captação de projeto audiovisual registrada
+      pela Ancine (`ancine.consulta`), tipada e com o documento do proponente
+      normalizado. Todos os mecanismos ficam; escolher quais contam para um
+      indicador é da Gold de cada produto.
 
-      Dois mecanismos, não um: 'FSA' responde literalmente ao que o documento da
-      meta nomeia; 'AUDIOVISUAL' carrega Lei do Audiovisual (ART1/ART3/1A/3A),
-      FUNCINES e os editais da Ancine. ART25/ART18 ficam de fora porque são
-      Rouanet e já entram pelo SALIC, por fonte melhor — incluí-los duplicaria
-      evento. Também ficam de fora RENDIMENTOS, CONTRAPARTIDA, OUTRAS FONTES e
-      lei estadual/municipal, que não são fomento federal ao agente.
-
-      Armadilhas de formato, as duas medidas nesta tabela: `data_captacao` é
+      Armadilhas de formato, as duas medidas nesta tabela: a data da origem é
       TEXT no padrão AMERICANO M/D/YYYY ('7/12/2007' é 12 de julho, não 7 de
-      dezembro), e `valor_de_captacao` é TEXT no padrão brasileiro ('50.000,00').
+      dezembro), e o valor é TEXT no padrão brasileiro ('50.000,00'). Linha
+      fora desses padrões fica de fora.
 
       A fonte é quase toda CNPJ — proponente pessoa física é, na prática,
-      invisível aqui. É a limitação desta fonte, e empurra na mesma direção de
-      todas as outras: pode deixar de revelar um veterano, nunca inventar um.
+      invisível aqui.
     config:
-      tags: [silver, agentes, ancine, audiovisual, meta5]
+      tags: [silver, ancine, audiovisual]
       meta:
         status: Active
-        meta_objetivo: 'Meta 5 — eventos de captação do audiovisual federal'
         origem_dados: 'ancine.consulta'
         openmetadata:
-          domain: Cultura.Fomento Direto
+          domain: Cultura.Incentivo Fiscal
           tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
           glossary:
             - MinC.Agentes.Proponente
-          customProperties:
-            responsavel_negocio: 'Meta 5 - agentes'
     columns:
-      - name: beneficiario_documento
-        description: CPF (11) ou CNPJ (14) do proponente, normalizado com LPAD.
+      - name: proponente_documento
+        description: >
+          CPF (11) ou CNPJ (14) de quem recebeu a captação, normalizado com
+          LPAD. Documento só de zeros fica de fora.
         data_type: text
         meta:
           openmetadata:
@@ -67,32 +60,33 @@ models:
               - MinC.Identificadores.IdentificadorUnico
         tests:
           - not_null
-      - name: beneficiario_nome
-        description: >
-          Nome do proponente como a Ancine registra. Não é usado por nenhum
-          modelo a jusante — morre em int_bbagil_salic_ancine_eventos_fomento.
+      - name: proponente_nome
+        description: Nome do proponente como a Ancine registra.
         data_type: text
         meta:
           openmetadata:
             tags:
               - PII.NonSensitive
-      - name: programa_fomento
-        description: Mecanismo — 'FSA' ou 'AUDIOVISUAL'.
+      - name: mecanismo
+        description: >
+          Mecanismo de financiamento como a Ancine registra ('FSA', 'ART1',
+          'ART25', 'ART41 (FUNCINES)', 'RENDIMENTOS', 'LEI ESTADUAL'...), sem
+          agrupamento.
         data_type: text
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['FSA', 'AUDIOVISUAL']
-      - name: data_evento
+      - name: data_captacao
         description: Data da captação, convertida do formato americano da origem.
         data_type: date
-      - name: valor
-        description: Valor captado, convertido do formato brasileiro da origem.
+        tests:
+          - not_null
+      - name: valor_captacao
+        description: >
+          Valor captado, convertido do formato brasileiro da origem. Pode ser
+          zero ou negativo como na origem.
         data_type: numeric
+        tests:
+          - not_null
       - name: no_salic
         description: >
           Número do projeto no SALIC anotado pela Ancine. Não vem do SALIC — é
-          coluna da própria `ancine.consulta`. Serve de rastreabilidade e não
-          atravessa para int_bbagil_salic_ancine_eventos_fomento.
+          coluna da própria `ancine.consulta`.
         data_type: text

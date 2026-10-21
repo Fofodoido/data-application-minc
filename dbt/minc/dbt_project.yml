@@ -21,11 +21,12 @@ models:
     metadata:
       +materialized: incremental
       +schema: metadata
-    # Estrutura do ADR 0010: uma pasta por fonte, uma por produto e a
-    # `intermediate`, arquivos planos com a camada no prefixo do nome, e o
-    # schema e o nome da pasta. A Meta 5 (novos entrantes no fomento federal)
-    # mora aqui: bbagil, salic, ancine e relatorio_gestao ate a silver, o
-    # cruzamento na intermediate e as golds em cultura_em_numeros.
+    # Estrutura do ADR 0010: uma pasta por fonte, a `intermediate` e, dentro
+    # de `data_products/`, uma por produto; arquivos planos com a camada no
+    # prefixo do nome, e o schema e o nome da pasta. A Meta 5 (novos entrantes
+    # no fomento federal) mora aqui: bbagil, salic, ancine e transferegov ate a
+    # silver, o cruzamento na intermediate e a regra de negocio nas golds de
+    # data_products/cultura_em_numeros.
     #
     # As pastas de fonte caem no MESMO schema da tabela que a ingestao grava
     # (bbagil.extrato_bbagil, ancine.consulta). Nao colide: todo modelo aqui
@@ -39,8 +40,12 @@ models:
     ancine:
       +schema: ancine
       +materialized: view
-    relatorio_gestao:
-      +schema: relatorio_gestao
+    # TransfereGov. Por ora so as planilhas de contemplados que os entes anexam
+    # ao relatorio de gestao (a source fica no schema `relatorio_gestao`, onde a
+    # extracao_anexos_dag grava). Nao colide com as tabelas de origem do schema
+    # `transferegov`: aqui tudo comeca com bronze_ ou silver_.
+    transferegov:
+      +schema: transferegov
       +materialized: view
     # SALIC no layout do ADR. Divide o schema `salic` com o salic_dbt ate ele
     # migrar; os nomes nao colidem (bronze_legado_*/silver_legado_* aqui,
@@ -51,11 +56,15 @@ models:
     intermediate:
       +schema: intermediate
       +materialized: table
-    # Produto de dados Cultura em Numeros (Gold). Convencao de nome do produto:
-    # eixo<N>_meta<M>_<nome> -- ver o schema.yml da pasta.
-    cultura_em_numeros:
-      +schema: cultura_em_numeros
-      +materialized: table
+    # Produtos de dados (Gold), um por subpasta. A pasta `data_products/` e so
+    # organizacao no repositorio: o schema e o nome do produto, pelo +schema
+    # explicito de cada um.
+    data_products:
+      # Cultura em Numeros. Convencao de nome do produto:
+      # eixo<N>_meta<M>_<nome> -- ver o schema.yml da pasta.
+      cultura_em_numeros:
+        +schema: cultura_em_numeros
+        +materialized: table
     # Meta 3 — cotas/reservas (LPG + PNAB). Domínio próprio, schema minc_cotas,
     # separado da Meta 5 (meta 5 do colega). Bronze materializado como table
     # porque filtra o lixo de parsing (fica ~20k linhas em vez de milhões).

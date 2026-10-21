@@ -6,8 +6,8 @@ version: 2
 #
 # EXCEÇÃO DE ENTIDADE: o `legado_` no nome. Pelo ADR a entidade do SALIC é
 # <banco>_<tabela> (bronze_sac_captacao), mas esse nome é da bronze da v2,
-# quando o salic_dbt migrar. Estes modelos saem quando a reconciliação G3 entre
-# v1 e v2 for feita (HANDOFF.md).
+# quando o salic_dbt migrar. Estes modelos saem quando a silver da Rouanet
+# passar a ler a v2, em PR próprio.
 models:
   - name: bronze_legado_sac_captacao
     description: >
@@ -53,12 +53,10 @@ models:
 
   - name: silver_legado_sac_captacao_proponente
     description: >
-      Camada Silver — Meta 5. Um evento por captação real de recurso na Lei
-      Rouanet, no mesmo formato dos pagamentos do BB Ágil. O evento é o
-      recibo de captação (dinheiro efetivamente captado), não a aprovação do
-      projeto: projeto aprovado que nunca captou não deu acesso a recurso
-      nenhum, e misturar aprovação com pagamento tornaria a comparação entre
-      mecanismos incoerente. Grão: 1 linha por recibo de captação.
+      Camada Silver — um recibo de captação da Lei Rouanet por linha, com o
+      proponente que recebeu o recurso. Junta o recibo (sac__captacao) ao
+      cadastro do projeto pelo PRONAC e tipa; não decide quais recibos
+      contam para um indicador. Grão: 1 linha por recibo de captação.
 
       O proponente de cada PRONAC é resolvido por prioridade, com DISTINCT ON:
       sac__projetos vem primeiro (é a ponte natural, com cgccpf), e
@@ -70,14 +68,11 @@ models:
       com sac__captacao.
 
       Lê a ingestão v1 do SALIC (source `bronze_sac_legado`, schema `bronze`),
-      não a v2 oficial em `salic_bronze`. Migrar é trabalho à parte: a v2 tem
-      571 modelos de bronze e ainda não foi verificado se a captação chega lá
-      com o mesmo grão e a mesma cobertura de 1993 em diante.
+      não a v2 oficial em `salic_bronze`. A troca é PR próprio.
     config:
-      tags: [silver, agentes, salic, rouanet, meta5]
+      tags: [silver, salic, rouanet]
       meta:
         status: Active
-        meta_objetivo: 'Meta 5 — eventos de captação da Lei Rouanet'
         origem_dados: 'bronze_sac_legado.sac__captacao + sac__projetos + sac__tbapiprojetorouanet'
         openmetadata:
           domain: Cultura.Fomento Direto
@@ -88,10 +83,8 @@ models:
           glossary:
             - MinC.Politicas.Rouanet
             - MinC.Agentes.Proponente
-          customProperties:
-            responsavel_negocio: 'Meta 5 - agentes'
     columns:
-      - name: beneficiario_documento
+      - name: proponente_documento
         description: CPF (11) ou CNPJ (14) do proponente, normalizado com LPAD.
         data_type: text
         meta:
@@ -102,35 +95,25 @@ models:
               - MinC.Identificadores.IdentificadorUnico
         tests:
           - not_null
-      - name: beneficiario_nome
+      - name: proponente_nome
         description: >
           Nome do proponente. Só existe quando o casamento veio por
           sac__tbapiprojetorouanet — a prioridade 1 (sac__projetos) não traz
-          nome e devolve NULL. Não atravessa para int_bbagil_salic_ancine_eventos_fomento.
+          nome e devolve NULL.
         data_type: text
         meta:
           openmetadata:
             tags:
               - PII.NonSensitive
-      - name: programa_fomento
-        description: Sempre 'ROUANET'.
-        data_type: text
-        meta:
-          openmetadata:
-            glossary:
-              - MinC.Politicas.Rouanet
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['ROUANET']
-      - name: data_evento
+      - name: data_recibo
         description: Data do recibo de captação.
         data_type: date
         tests:
           - not_null
-      - name: valor
-        description: Valor captado no recibo, em reais. Sempre maior que zero.
+      - name: valor_captado
+        description: >
+          Valor captado no recibo, em reais, como a origem registra — pode ser
+          zero ou negativo.
         data_type: numeric
         tests:
           - not_null

@@ -40,7 +40,7 @@ WITH agentes AS (
         MIN(data_primeiro_acesso_mecanismo)
             FILTER (WHERE programa_fomento = 'ROUANET') AS entrada_rouanet,
         MAX(programa_fomento) FILTER (WHERE eh_porta_de_entrada) AS mecanismo_porta_entrada
-    FROM {{ ref('int_bbagil_salic_ancine_primeiro_acesso') }}
+    FROM {{ ref('eixo2_meta5_primeiro_acesso_agente') }}
     GROUP BY beneficiario_documento, tipo_pessoa
 ),
 

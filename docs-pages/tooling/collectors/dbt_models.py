@@ -33,10 +33,10 @@ CAMADAS = ("bronze", "silver", "gold", "views")
 # Camada pelo prefixo do nome do arquivo, para a estrutura plana do ADR 0010.
 PREFIXOS_CAMADA = {"bronze_": "bronze", "silver_": "silver", "int_": "intermediate"}
 
-# Pastas de produto de dados (Gold, ADR 0010): o arquivo não leva prefixo de
-# camada. Mesma lista de PRODUTOS em .claude/skills/arquitetura-lakehouse-minc/
-# scripts/verificar.py.
-PRODUTOS = {"cultura_em_numeros", "sefli", "patrimonio_cultural"}
+# Produtos de dados (Gold, ADR 0010) moram em `data_products/<produto>/`, e o
+# arquivo não leva prefixo de camada. O produto é a subpasta: não há lista a
+# manter em dia.
+DATA_PRODUCTS = "data_products"
 
 # Convenção de nome do Cultura em Números: eixo<N>_meta<M>_<nome>. A meta é o
 # que liga a gold ao domínio do site (`meta:` em dominios.yml).
@@ -86,9 +86,9 @@ def _classificar(relativo: Path) -> tuple[str, str]:
     partes = relativo.parts[:-1]
     if not partes:
         return "geral", "outros"
+    if partes[0] == DATA_PRODUCTS:
+        return (partes[1] if len(partes) > 1 else "geral"), "gold"
     dominio = partes[0].removesuffix("_dbt")
-    if partes[0] in PRODUTOS:
-        return dominio, "gold"
     camada = next((p for p in partes if p in CAMADAS), None)
     if camada is None:
         # Estrutura do ADR 0010: arquivos planos na pasta da fonte, e a camada

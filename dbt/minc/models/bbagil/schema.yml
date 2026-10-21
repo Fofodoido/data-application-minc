@@ -230,8 +230,10 @@ models:
         data_type: date
       - name: id
         description: >
-          Tipagem: 100% dos 508146 valores casam com inteiro.
-        data_type: integer
+          Tipagem: 100% dos 508146 valores casam com inteiro. bigint, e não
+          integer: é a chave da transação no banco, e o perfil mede o padrão,
+          não a faixa.
+        data_type: bigint
       - name: bookingdate
         description: >
           Tipagem: valores heterogeneos.
@@ -298,8 +300,10 @@ models:
         data_type: integer
       - name: beneficiarydocumentid
         description: >
-          Tipagem: 100% dos 508146 valores casam com inteiro.
-        data_type: integer
+          CPF ou CNPJ do beneficiário como a API devolve, sem zero à esquerda.
+          Fica texto: 100% dos 508146 valores casam com inteiro, mas é
+          identificador, e como integer estouraria a faixa em CPF e CNPJ.
+        data_type: text
         meta:
           openmetadata:
             tags:
@@ -554,40 +558,41 @@ models:
 
   - name: silver_pagamento_extrato_bbagil
     description: >
-      Camada Silver — extrato bancário do BB Gestão Ágil (schema `bbagil`),
-      filtrado pelos 8 filtros de negócio (documento válido, sem
-      subtransação, exclui BB/FNC/estornos/repasses entre entes públicos).
-      Só débitos (pagamentos de fato) sobrevivem. Fonte primária da Meta 5
-      Fase 4 (primeiro acesso comprovado por dado bancário).
+      Camada Silver — saídas de dinheiro do extrato bancário do BB Gestão
+      Ágil: lançamentos a débito, sem subtransação, com beneficiário
+      identificado e sem os dois lados de um estorno. Lê a
+      silver_extrato_bbagil e só limpa.
 
       Grão: 1 linha por transação de débito do extrato — a chave da origem é
-      (id_plano_acao, id). Transações com subtransactionquantity > 0 ficam
-      fora de propósito: nelas o beneficiário real só aparece no
-      sublançamento, e quem os traz é silver_pagamento_subtransacao_bbagil.
+      (id_plano_acao, id_plano_acao_dado_bancario, id). Transações com
+      subtransactionquantity > 0 ficam fora de propósito: nelas o
+      beneficiário real só aparece no sublançamento, e quem os traz é
+      silver_pagamento_subtransacao_bbagil.
 
-      O par débito/crédito de mesmo valor, mesmo documento e mesmo plano de
-      ação é lido como estorno e removido dos dois lados — cobrar o débito
-      sem descontar o crédito inventaria pagamento que foi desfeito.
+      O par débito/crédito de mesmo valor, mesmo documento e mesma conta é
+      lido como estorno e removido dos dois lados.
+
+      Quem conta como pagamento a agente cultural não é decidido aqui:
+      repasse a ente público, devolução ao FNC, transferência ao Banco do
+      Brasil e lançamento interno continuam na tabela, para a Gold filtrar.
     config:
-      tags: [silver, agentes, bbagil, meta5, fase4]
+      tags: [silver, bbagil]
       meta:
         status: Active
-        meta_objetivo: 'Meta 5 — pagamentos do BB Ágil sem subtransação'
-        origem_dados: 'bbagil.extrato_bbagil'
+        origem_dados: 'silver_extrato_bbagil'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier3
           owner: minc-data-engineering
           tags:
-            - Certification.Bronze
+            - Certification.Silver
           glossary:
             - MinC.Politicas.FundoAFundo
-          customProperties:
-            responsavel_negocio: 'Meta 5 - agentes'
     columns:
       - name: id_plano_acao
-        description: Identificador do plano de ação (ente + programa) dono das contas bancárias.
-        data_type: text
+        description: >
+          Identificador do plano de ação (ente + programa) dono da conta.
+        data_type: integer
         meta:
           openmetadata:
             glossary:
@@ -600,27 +605,39 @@ models:
           tem mais de uma conta (os da LPG têm duas) e cada uma é consultada
           separadamente no BB Ágil — por isso a conta faz parte da chave da
           tabela raw, do join com as subtransações e da detecção de estorno.
-        data_type: text
+        data_type: integer
         tests:
           - not_null
       - name: id
         description: >
-          Identificador da transação no extrato (id_plano_acao +
-          id_plano_acao_dado_bancario + id é a chave da tabela raw). Usado por
-          silver_pagamento_subtransacao_bbagil pra achar a transação-mãe
+          Identificador da transação no extrato. Usado por
+          silver_pagamento_subtransacao_bbagil para achar a transação-mãe
           (id_transacao_pai = id, dentro da mesma conta).
-        data_type: text
+        data_type: bigint
         tests:
           - not_null
       - name: programa_curto
         description: >
-          Código curto do programa devolvido pelo BSC (governmentprogramname —
-          ex. 'MINC-LPG-MUNI-AUD', 'MINC-PNAB-2023'). Insumo pra derivar
-          programa_fomento em silver_pagamento_bbagil.
+          Código do programa como o BSC devolve (governmentprogramname — ex.
+          'MINC-LPG-MUNI-AUD', 'MINC-PNAB-2023', 'SECULT-A BLANC-MUN'). Sem
+          classificação: o mapeamento para política de fomento é regra de
+          produto e fica na Gold.
         data_type: text
+      - name: beneficiario_documento_bruto
+        description: >
+          CPF/CNPJ do beneficiário como a origem devolve, sem zero à esquerda.
+          É a forma em que os códigos especiais aparecem ('191' é o Banco do
+          Brasil, '3793086100189' o Fundo Nacional de Cultura).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+        tests:
+          - not_null
       - name: beneficiario_documento
         description: >
-          CPF/CNPJ do beneficiário do pagamento, normalizado (LPAD por
+          CPF/CNPJ do beneficiário, normalizado (LPAD por
           beneficiarypersontype — 11 dígitos p/ CPF, 14 p/ CNPJ).
         data_type: text
         meta:
@@ -633,60 +650,64 @@ models:
           - not_null
       - name: beneficiario_nome
         description: >
-          Nome do beneficiário do pagamento, como devolvido pelo BSC. Também
-          é o campo em que os filtros de repasse entre entes públicos agem:
-          nomes começados por MUNICIPIO, ESTADO, FUNDO, SECRETARIA ou SEFAZ
-          não chegam aqui.
+          Nome do beneficiário, como o BSC devolve. É nele que a Gold reconhece
+          repasse a ente público (MUNICIPIO, ESTADO, FUNDO, SECRETARIA, SEFAZ).
         data_type: text
         meta:
           openmetadata:
             tags:
               - PII.NonSensitive
+      - name: descriptionname
+        description: >
+          Descrição do lançamento no extrato. É nela que a Gold reconhece
+          lançamento interno da conta (aplicação, resgate, imposto, ordem
+          bancária cancelada).
+        data_type: text
       - name: valor
-        description: Valor do pagamento (débito), em reais.
+        description: >
+          Valor do pagamento (débito), em reais.
         data_type: numeric
         tests:
           - not_null
       - name: data_pagamento
-        description: Data do lançamento no extrato (bookingdate), convertida pra DATE.
+        description: >
+          Data do lançamento, convertida para DATE.
         data_type: date
         tests:
           - not_null
 
   - name: silver_pagamento_subtransacao_bbagil
     description: >
-      Camada Silver — sublançamentos do BB Gestão Ágil, usados quando a
-      transação-mãe do extrato tem subtransactionquantity > 0 (o
-      beneficiário real só aparece aqui). Filtra por status 'Pago' e
-      exclui repasses entre entes públicos.
+      Camada Silver — sublançamentos pagos do BB Gestão Ágil, usados quando
+      a transação-mãe do extrato tem subtransactionquantity > 0 (o
+      beneficiário real só aparece aqui). Fica só o status 'Pago', com
+      beneficiário identificado.
 
       Grão: 1 linha por sublançamento pago. Complementa
-      silver_pagamento_extrato_bbagil sem sobrepô-lo — um trata a transação que é
-      pagamento direto, o outro a que é bolo repartido entre vários
-      beneficiários. Os dois juntos formam silver_pagamento_bbagil.
+      silver_pagamento_extrato_bbagil sem sobrepô-lo; os dois juntos formam
+      silver_pagamento_bbagil.
 
       O valor vem em módulo (ABS): no sublançamento o sinal indica o lado da
-      partida dobrada, não devolução.
+      partida dobrada, não devolução. Repasse a ente público continua na
+      tabela, para a Gold filtrar.
     config:
-      tags: [silver, agentes, bbagil, meta5, fase4]
+      tags: [silver, bbagil]
       meta:
         status: Active
-        meta_objetivo: 'Meta 5 — sublançamentos pagos do BB Ágil'
-        origem_dados: 'bbagil.subtransacao_bbagil + bbagil.extrato_bbagil'
+        origem_dados: 'silver_subtransacao_bbagil + silver_extrato_bbagil'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier3
           owner: minc-data-engineering
           tags:
-            - Certification.Bronze
+            - Certification.Silver
           glossary:
             - MinC.Politicas.FundoAFundo
-          customProperties:
-            responsavel_negocio: 'Meta 5 - agentes'
     columns:
       - name: id_plano_acao
-        description: Identificador do plano de ação, herdado da transação-mãe.
-        data_type: text
+        description: >
+          Identificador do plano de ação (ente + programa) dono da conta.
+        data_type: integer
         meta:
           openmetadata:
             glossary:
@@ -695,21 +716,37 @@ models:
           - not_null
       - name: id_plano_acao_dado_bancario
         description: >
-          Identificador da conta bancária de onde saiu o sublançamento. Entra
-          no join com a transação-mãe: o `id` da transação não é único entre
-          as contas de um mesmo plano, então sem a conta o join duplicaria
-          cada sublançamento.
-        data_type: text
+          Identificador da conta bancária no Transferegov. Um plano de ação
+          tem mais de uma conta (os da LPG têm duas) e cada uma é consultada
+          separadamente no BB Ágil — por isso a conta faz parte da chave da
+          tabela raw, do join com as subtransações e da detecção de estorno.
+        data_type: integer
         tests:
           - not_null
       - name: programa_curto
         description: >
-          Código curto do programa (governmentprogramname), herdado da
-          transação-mãe do extrato via id_plano_acao +
-          id_plano_acao_dado_bancario + id_transacao_pai = id.
+          Código do programa, herdado da transação-mãe do extrato,
+          como o BSC devolve (governmentprogramname — ex.
+          'MINC-LPG-MUNI-AUD', 'MINC-PNAB-2023', 'SECULT-A BLANC-MUN'). Sem
+          classificação: o mapeamento para política de fomento é regra de
+          produto e fica na Gold.
         data_type: text
+      - name: beneficiario_documento_bruto
+        description: >
+          CPF/CNPJ do beneficiário como a origem devolve, sem zero à esquerda.
+          É a forma em que os códigos especiais aparecem ('191' é o Banco do
+          Brasil, '3793086100189' o Fundo Nacional de Cultura).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+        tests:
+          - not_null
       - name: beneficiario_documento
-        description: CPF/CNPJ do beneficiário do sublançamento, normalizado (LPAD por persontype).
+        description: >
+          CPF/CNPJ do beneficiário, normalizado (LPAD por
+          beneficiarypersontype — 11 dígitos p/ CPF, 14 p/ CNPJ).
         data_type: text
         meta:
           openmetadata:
@@ -721,44 +758,40 @@ models:
           - not_null
       - name: beneficiario_nome
         description: >
-          Nome do beneficiário do sublançamento, como devolvido pelo BSC.
-          Mesmos filtros de ente público do extrato agem sobre este campo.
+          Nome do beneficiário, como o BSC devolve. É nele que a Gold reconhece
+          repasse a ente público (MUNICIPIO, ESTADO, FUNDO, SECRETARIA, SEFAZ).
         data_type: text
         meta:
           openmetadata:
             tags:
               - PII.NonSensitive
       - name: valor
-        description: Valor do sublançamento (em módulo), em reais.
+        description: >
+          Valor do sublançamento (em módulo), em reais.
         data_type: numeric
         tests:
           - not_null
       - name: data_pagamento
-        description: Data de pagamento do sublançamento (paymentdate), convertida pra DATE.
+        description: >
+          Data do lançamento, convertida para DATE.
         data_type: date
         tests:
           - not_null
 
   - name: silver_pagamento_bbagil
     description: >
-      Camada Silver — Meta 5 Fase 4. Unifica silver_pagamento_extrato_bbagil e
-      silver_pagamento_subtransacao_bbagil em 1 linha por pagamento real a um
-      beneficiário, com programa_fomento (LPG/PNAB/LAB) derivado do código
-      curto de programa do BSC. Alimenta int_bbagil_salic_ancine_eventos_fomento.
+      Camada Silver — une silver_pagamento_extrato_bbagil e
+      silver_pagamento_subtransacao_bbagil em 1 linha por saída de dinheiro
+      para um beneficiário identificado, com tipo_lancamento dizendo de qual
+      lado a linha veio.
 
-      LAB deixou de ser colapsado em PNAB: os códigos SECULT-A BLANC são a
-      Lei Aldir Blanc II (Lei 14.399/2022), e a pergunta 2.2 da Meta 5 pede
-      os mecanismos separados. A LAB I emergencial (2020-2021) não existe em
-      nenhuma fonte do banco.
-
-      Pagamento cujo programa_curto não casa com nenhum dos três padrões sai
-      da tabela (programa_fomento NULL é filtrado). É movimentação de conta
-      de plano de ação que não é repasse de política do MinC.
+      Não classifica programa nem decide quem conta como agente cultural: o
+      código do programa sai como o BSC devolve, com as colunas que os
+      filtros de negócio da Gold usam. Alimenta int_ancine_bbagil_salic.
     config:
-      tags: [silver, agentes, bbagil, meta5, fase4]
+      tags: [silver, bbagil]
       meta:
         status: Active
-        meta_objetivo: 'Meta 5 — pagamentos do BB Ágil por beneficiário e mecanismo'
         origem_dados: 'silver_pagamento_extrato_bbagil + silver_pagamento_subtransacao_bbagil'
         openmetadata:
           domain: Cultura.Fomento Direto
@@ -767,22 +800,60 @@ models:
           tags:
             - Certification.Silver
           glossary:
-            - MinC.Agentes.AgenteCultural
             - MinC.Politicas.FundoAFundo
-          customProperties:
-            responsavel_negocio: 'Meta 5 - agentes'
     columns:
-      - name: id_plano_acao
-        description: Identificador do plano de ação (ente + programa) dono da conta que fez o pagamento.
+      - name: tipo_lancamento
+        description: >
+          'extrato' (transação-folha do extrato) ou 'subtransacao'
+          (sublançamento de uma transação repartida).
         data_type: text
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['extrato', 'subtransacao']
+      - name: id_plano_acao
+        description: >
+          Identificador do plano de ação (ente + programa) dono da conta.
+        data_type: integer
         meta:
           openmetadata:
             glossary:
               - MinC.Identificadores.IdPlanoAcao
         tests:
           - not_null
+      - name: id_plano_acao_dado_bancario
+        description: >
+          Identificador da conta bancária no Transferegov. Um plano de ação
+          tem mais de uma conta (os da LPG têm duas) e cada uma é consultada
+          separadamente no BB Ágil — por isso a conta faz parte da chave da
+          tabela raw, do join com as subtransações e da detecção de estorno.
+        data_type: integer
+        tests:
+          - not_null
+      - name: programa_curto
+        description: >
+          Código do programa como o BSC devolve (governmentprogramname — ex.
+          'MINC-LPG-MUNI-AUD', 'MINC-PNAB-2023', 'SECULT-A BLANC-MUN'). Sem
+          classificação: o mapeamento para política de fomento é regra de
+          produto e fica na Gold.
+        data_type: text
+      - name: beneficiario_documento_bruto
+        description: >
+          CPF/CNPJ do beneficiário como a origem devolve, sem zero à esquerda.
+          É a forma em que os códigos especiais aparecem ('191' é o Banco do
+          Brasil, '3793086100189' o Fundo Nacional de Cultura).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+        tests:
+          - not_null
       - name: beneficiario_documento
-        description: CPF/CNPJ do beneficiário do pagamento, normalizado.
+        description: >
+          CPF/CNPJ do beneficiário, normalizado (LPAD por
+          beneficiarypersontype — 11 dígitos p/ CPF, 14 p/ CNPJ).
         data_type: text
         meta:
           openmetadata:
@@ -792,30 +863,30 @@ models:
               - MinC.Identificadores.IdentificadorUnico
         tests:
           - not_null
-      - name: programa_fomento
+      - name: beneficiario_nome
         description: >
-          Programa de fomento — 'LPG', 'PNAB' ou 'LAB'. Derivado do
-          programa_curto do BSC: 'MINC-LPG%' vira LPG, '%PNAB%' vira PNAB e
-          '%A-BLANC%' vira LAB (a comparação normaliza underscore e espaço
-          para hífen antes de casar).
+          Nome do beneficiário, como o BSC devolve. É nele que a Gold reconhece
+          repasse a ente público (MUNICIPIO, ESTADO, FUNDO, SECRETARIA, SEFAZ).
         data_type: text
         meta:
           openmetadata:
-            glossary:
-              - MinC.Politicas.LPG
-              - MinC.Politicas.PNAB
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['LPG', 'PNAB', 'LAB']
+            tags:
+              - PII.NonSensitive
+      - name: descriptionname
+        description: >
+          Descrição do lançamento no extrato; nula no sublançamento. É nela que a Gold reconhece
+          lançamento interno da conta (aplicação, resgate, imposto, ordem
+          bancária cancelada).
+        data_type: text
       - name: valor
-        description: Valor do pagamento, em reais.
+        description: >
+          Valor do pagamento, em reais.
         data_type: numeric
         tests:
           - not_null
       - name: data_pagamento
-        description: Data do pagamento.
+        description: >
+          Data do lançamento, convertida para DATE.
         data_type: date
         tests:
           - not_null

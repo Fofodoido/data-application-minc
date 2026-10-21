@@ -25,6 +25,22 @@ O que o **dump antigo para o banco do MinC** tinha: `bsc.raw_bbagil_*` e
 demais ainda usam os antigos. Confira com `\dt bbagil.*` antes de rodar e troque num
 lugar só, no CTE de origem.
 
+## Tabelas da Meta 5 depois do ADR 0010 (21/10/2026)
+
+As queries citam o schema `agentes`, que a migração para o ADR 0010 esvaziou: ele
+fica no banco até o DROP manual, **parado na última carga**, e depois disso
+estas queries quebram. Elas registram a investigação de agosto/setembro como
+foi feita e não foram reescritas: trocar a tabela muda o que elas medem. Para
+rodar de novo, troque no CTE de origem:
+
+| Antes | Agora | Atenção |
+|---|---|---|
+| `agentes.bbagil_extrato_filtrado` | `bbagil.silver_pagamento_extrato_bbagil` | a silver só limpa: repasse a ente público, FNC, Banco do Brasil e lançamento interno continuam lá |
+| `agentes.bbagil_subtransacoes_filtrado` | `bbagil.silver_pagamento_subtransacao_bbagil` | idem, sem o filtro de ente público |
+| `agentes.pagamentos_bbagil_beneficiarios` | `cultura_em_numeros.eixo2_meta5_evento_fomento` com `fonte = 'BB_AGIL'` | é a versão com todos os filtros e a política classificada; tem `data_evento`, não `data_pagamento`, e já aplica o piso de valor |
+| `agentes.identificadores_contemplados` | `transferegov.silver_planilha_contemplados` | desabilitada até a cadeia de anexos rodar |
+| `agentes.primeiro_pagamento_bancario` | `cultura_em_numeros.eixo2_meta5_primeiro_acesso_agente` | já não existia antes da migração; a substituta compara todos os mecanismos, não só LPG × PNAB |
+
 ## Ordem de execução
 
 **A ordem importa.** Cada bloco muda a população sobre a qual os seguintes calculam. Rodar Q4 antes de Q0 produz uma tabela por ente que você vai jogar fora — e, pior, uma acusação falsa contra prefeituras que nunca foram consultadas.

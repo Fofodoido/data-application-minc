@@ -14,9 +14,10 @@ Ao lado dos `.sql` que descreve, sempre com o nome `schema.yml`:
 
 ```text
 models/
-  cultura_em_numeros/
-    eixo2_meta5_primeiro_acesso_anual.sql
-    schema.yml
+  data_products/
+    cultura_em_numeros/
+      eixo2_meta5_primeiro_acesso_anual.sql
+      schema.yml
 ```
 
 O `name` do modelo e o nome do arquivo sem `.sql`.

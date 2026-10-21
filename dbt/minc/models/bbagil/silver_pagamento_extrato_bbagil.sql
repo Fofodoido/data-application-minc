@@ -1,21 +1,24 @@
 {{ config(materialized='table') }}
 
--- Silver — extrato bancário do BB Gestão Ágil (bronze_extrato_bbagil), filtrado para
--- manter só pagamentos reais a beneficiários finais. Porta pra SQL os 8
--- filtros sequenciais de plugins/regras_negocio_bbagil.py::pipeline_filtro_extrato
--- (módulo órfão em Python, mantido só como referência/histórico dessas regras):
---   1. beneficiário válido (documento != '0') e sem subtransações (as com
---      subtransactionquantity > 0 são tratadas em silver_pagamento_subtransacao_bbagil,
---      pra não contar o mesmo pagamento 2x).
---   2. remove transferências para o próprio Banco do Brasil (documento '191').
---   3. remove transações internas/impostos/aplicações automáticas (descriptionname).
---   4. remove devoluções de saldo ao Fundo Nacional de Cultura (CNPJ 3793086100189).
---   5. remove pares crédito/débito do mesmo plano de ação + documento + valor
---      (estorno no mesmo dia ou devolução futura de um débito anterior).
---   6. mantém só débitos (saída de dinheiro da conta do ente pro beneficiário).
---   7. remove repasses entre entes públicos (nome do beneficiário começa com
---      MUNICIPIO/ESTADO/FUNDO/SECRETARIA/SEFAZ — são repasses administrativos,
---      não pagamento a agente cultural).
+-- Silver — saídas de dinheiro do extrato bancário do BB Gestão Ágil, uma linha
+-- por lançamento a débito que chegou a um beneficiário identificado. Lê a
+-- silver tipada (silver_extrato_bbagil) e só limpa:
+--   1. fica só o lançamento sem subtransações (subtransactionquantity = 0).
+--      Os que têm subtransação são abertos em silver_pagamento_subtransacao_bbagil;
+--      mantê-los aqui contaria o mesmo dinheiro duas vezes.
+--   2. descarta beneficiário ausente (documento nulo ou '0'), que é lixo da
+--      origem, não pagamento.
+--   3. descarta os dois lados de um estorno: crédito e débito da mesma conta,
+--      com o mesmo documento e o mesmo valor.
+--   4. fica só o débito, que é a saída de dinheiro da conta.
+--
+-- Quem CONTA como pagamento a agente cultural não é decidido aqui (ADR 0010,
+-- regra de negócio só na Gold). Repasse a ente público, devolução ao Fundo
+-- Nacional de Cultura, transferência ao próprio Banco do Brasil e lançamentos
+-- internos (aplicação, resgate, imposto) continuam nesta tabela, com
+-- beneficiario_nome, beneficiario_documento_bruto e descriptionname para quem
+-- for filtrar. Os critérios são os de
+-- plugins/regras_negocio_bbagil.py::pipeline_filtro_extrato.
 --
 -- beneficiario_documento normalizado via beneficiarypersontype (1=PF/CPF,
 -- 2=PJ/CNPJ) + LPAD, porque uma fração relevante das linhas chega sem o
@@ -29,20 +32,20 @@ WITH base AS (
         governmentprogramname AS programa_curto,
         beneficiarydocumentid AS beneficiario_documento_bruto,
         CASE
-            WHEN beneficiarypersontype = '1'
+            WHEN beneficiarypersontype = 1
                 THEN LPAD(REGEXP_REPLACE(beneficiarydocumentid, '[^0-9]', '', 'g'), 11, '0')
-            WHEN beneficiarypersontype = '2'
+            WHEN beneficiarypersontype = 2
                 THEN LPAD(REGEXP_REPLACE(beneficiarydocumentid, '[^0-9]', '', 'g'), 14, '0')
         END AS beneficiario_documento,
         beneficiaryname AS beneficiario_nome,
         creditdebitindicator,
-        value::NUMERIC AS valor,
-        TO_DATE(bookingdate, 'DD/MM/YYYY') AS data_pagamento,
-        descriptionname
-    FROM {{ ref('bronze_extrato_bbagil') }}
-    WHERE subtransactionquantity = '0'
+        descriptionname,
+        value AS valor,
+        TO_DATE(bookingdate, 'DD/MM/YYYY') AS data_pagamento
+    FROM {{ ref('silver_extrato_bbagil') }}
+    WHERE subtransactionquantity = 0
       AND beneficiarydocumentid IS NOT NULL
-      AND beneficiarydocumentid NOT IN ('0', '191')
+      AND beneficiarydocumentid != '0'
 ),
 
 -- Chaves (conta + documento bruto + valor) que aparecem como débito E
@@ -68,8 +71,10 @@ SELECT
     b.id_plano_acao_dado_bancario,
     b.id,
     b.programa_curto,
+    b.beneficiario_documento_bruto,
     b.beneficiario_documento,
     b.beneficiario_nome,
+    b.descriptionname,
     b.valor,
     b.data_pagamento
 FROM base b
@@ -81,16 +86,3 @@ LEFT JOIN chaves_estorno ce
 WHERE b.creditdebitindicator = 'D'
   AND ce.id_plano_acao IS NULL
   AND b.beneficiario_documento IS NOT NULL
-  AND b.beneficiario_documento_bruto != '3793086100189'
-  AND b.descriptionname NOT IN (
-      'BB-APLIC C.PRZ-APL.AUT', 'Resgate Automatico', 'Impostos',
-      'ORDEM BANC CANCELADA', 'Ordem Bancaria', 'Resgate BB Fix',
-      'CREDITO CONVENIO', 'Estorno Resgate Automatico'
-  )
-  AND NOT (
-      UPPER(COALESCE(b.beneficiario_nome, '')) LIKE 'MUNICIPIO%'
-      OR UPPER(COALESCE(b.beneficiario_nome, '')) LIKE 'ESTADO%'
-      OR UPPER(COALESCE(b.beneficiario_nome, '')) LIKE 'FUNDO%'
-      OR UPPER(COALESCE(b.beneficiario_nome, '')) LIKE 'SECRETARIA%'
-      OR UPPER(COALESCE(b.beneficiario_nome, '')) LIKE 'SEFAZ%'
-  )

@@ -1,6 +1,6 @@
 {{ config(enabled=false, materialized='table') }}
 
--- DESABILITADO junto com int_relatorio_gestao_primeiro_acesso_contemplados,
+-- DESABILITADO junto com int_ancine_bbagil_salic_transferegov,
 -- seu único insumo, e com silver_planilha_contemplados — ver lá o motivo por
 -- extenso e a cadeia de DAGs necessária para reativar.
 --
@@ -36,15 +36,30 @@
 -- um mapeamento que nunca pôde ser confirmado contra o formulário original
 -- seria pior que não responder.
 --
--- A classificação vem de int_bbagil_salic_ancine_primeiro_acesso, então já é
+-- A classificação vem de eixo2_meta5_primeiro_acesso_agente, então já é
 -- CROSS-MECANISMO e já considera a Rouanet desde 1993 — um contemplado da LPG que captou
 -- Rouanet em 2010 aparece aqui corretamente como "Não".
 
--- O cruzamento com a lista de contemplados é feito na intermediate; aqui só
--- se agrega.
-WITH acesso_contemplado AS (
-    SELECT programa_fomento, beneficiario_documento, categoria_primeiro_acesso
-    FROM {{ ref('int_relatorio_gestao_primeiro_acesso_contemplados') }}
+-- O cruzamento com a lista de contemplados é feito na intermediate
+-- (int_ancine_bbagil_salic_transferegov), que só marca em que lista cada
+-- documento aparece. A regra fica aqui: o contemplado entra no programa da
+-- lista em que foi selecionado, com a classificação de primeiro acesso
+-- daquele mecanismo.
+WITH contemplados AS (
+    SELECT DISTINCT beneficiario_documento, contemplado_lpg, contemplado_pnab
+    FROM {{ ref('int_ancine_bbagil_salic_transferegov') }}
+    WHERE contemplado_lpg OR contemplado_pnab
+),
+
+acesso_contemplado AS (
+    SELECT pa.programa_fomento, pa.beneficiario_documento, pa.categoria_primeiro_acesso
+    FROM {{ ref('eixo2_meta5_primeiro_acesso_agente') }} pa
+    INNER JOIN contemplados c
+        ON pa.beneficiario_documento = c.beneficiario_documento
+        AND (
+            (pa.programa_fomento = 'LPG' AND c.contemplado_lpg)
+            OR (pa.programa_fomento = 'PNAB' AND c.contemplado_pnab)
+        )
 )
 
 SELECT

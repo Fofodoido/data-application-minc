@@ -35,9 +35,9 @@ body:
         - bbagil
         - salic
         - ancine
-        - relatorio_gestao
+        - transferegov
         - intermediate
-        - cultura_em_numeros
+        - data_products/cultura_em_numeros
         - metadata
         - Novo domínio
     validations:
