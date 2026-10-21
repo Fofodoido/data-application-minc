@@ -617,9 +617,9 @@ models:
       identifica evento: recibo sem id, sem data ou sem PRONAC resolvido.
 
       LIMITAÇÕES: a reconciliação por ano e PRONAC com
-      `salic/silver_legado_sac_captacao_proponente` — que lê a bronze v1, no
-      schema `bronze` — é o gate G3 e ainda não foi feita. Até lá os dois
-      convivem e nenhum substitui o outro.
+      `salic/silver_sac_captacao_proponente` (Meta 5) é o gate G3 e ainda não
+      foi feita. Os dois leem a mesma `sac__captacao` da v2 desde 21/10/2026;
+      até a reconciliação, convivem e nenhum substitui o outro.
       ATUALIZAÇÃO: recalculado a cada `dbt build`.
     config:
       tags: [silver, salic, rouanet, core, meta3, meta5]

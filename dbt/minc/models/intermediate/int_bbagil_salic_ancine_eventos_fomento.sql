@@ -68,7 +68,7 @@ bbagil_elegivel AS (
 
 rouanet AS (
     SELECT beneficiario_documento, programa_fomento, data_evento, valor
-    FROM {{ ref('silver_legado_sac_captacao_proponente') }}
+    FROM {{ ref('silver_sac_captacao_proponente') }}
 ),
 
 -- FSA e demais mecanismos federais do audiovisual. Como na Rouanet, o evento

@@ -24,7 +24,7 @@
 --
 -- LEITURA DO NUMERADOR: 'acessou a Rouanet' aqui é captação real de recurso,
 -- a mesma definição de evento usada no resto da meta (ver
--- silver_legado_sac_captacao_proponente) — não é projeto protocolado nem aprovado. Um
+-- silver_sac_captacao_proponente) — não é projeto protocolado nem aprovado. Um
 -- agente que submeteu projeto e não captou não conta como convertido.
 
 WITH agente AS (

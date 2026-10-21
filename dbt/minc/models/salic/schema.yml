@@ -1,18 +1,17 @@
 version: 2
 
 # SALIC fora do salic_dbt, na estrutura do ADR 0010. Por enquanto só a trilha
-# da Meta 5, que ainda lê a ingestão v1 (schema `bronze`, source
-# bronze_sac_legado).
+# da Meta 5, que lê a ingestão v2 (salic_bronze, source bronze_sac).
 #
-# EXCEÇÃO DE ENTIDADE: o `legado_` no nome. Pelo ADR a entidade do SALIC é
-# <banco>_<tabela> (bronze_sac_captacao), mas esse nome é da bronze da v2,
-# quando o salic_dbt migrar. Estes modelos saem quando a reconciliação G3 entre
-# v1 e v2 for feita (HANDOFF.md).
+# Os nomes seguem a entidade <banco>_<tabela> do ADR. Quando o salic_dbt
+# migrar, os modelos sac__<tabela> de lá (que tipam) viram silver_sac_<tabela>
+# aqui e reaproveitam estas bronzes.
 models:
-  - name: bronze_legado_sac_captacao
+  - name: bronze_sac_captacao
     description: >
-      Camada Bronze — cópia fiel de bronze.sac__captacao (ingestão SALIC v1), sem cast, filtro nem join
-      (ADR 0010). Todas as colunas chegam como na origem.
+      Camada Bronze — cópia fiel de salic_bronze.sac__captacao (ingestão SALIC
+      v2, via Trino), sem cast, filtro nem join (ADR 0010). Todas as colunas
+      chegam como text, como na origem.
     config:
       tags:
         - bronze
@@ -23,10 +22,11 @@ models:
         tier: Tier.Tier4
         owner: minc-data-engineering
 
-  - name: bronze_legado_sac_projetos
+  - name: bronze_sac_projetos
     description: >
-      Camada Bronze — cópia fiel de bronze.sac__projetos (ingestão SALIC v1), sem cast, filtro nem join
-      (ADR 0010). Todas as colunas chegam como na origem.
+      Camada Bronze — cópia fiel de salic_bronze.sac__projetos (ingestão SALIC
+      v2, via Trino), sem cast, filtro nem join (ADR 0010). Todas as colunas
+      chegam como text, como na origem.
     config:
       tags:
         - bronze
@@ -37,21 +37,7 @@ models:
         tier: Tier.Tier4
         owner: minc-data-engineering
 
-  - name: bronze_legado_sac_tbapiprojetorouanet
-    description: >
-      Camada Bronze — cópia fiel de bronze.sac__tbapiprojetorouanet (ingestão SALIC v1), sem cast, filtro nem join
-      (ADR 0010). Todas as colunas chegam como na origem.
-    config:
-      tags:
-        - bronze
-        - salic
-    meta:
-      openmetadata:
-        domain: Cultura.Incentivo Fiscal
-        tier: Tier.Tier4
-        owner: minc-data-engineering
-
-  - name: silver_legado_sac_captacao_proponente
+  - name: silver_sac_captacao_proponente
     description: >
       Camada Silver — Meta 5. Um evento por captação real de recurso na Lei
       Rouanet, no mesmo formato dos pagamentos do BB Ágil. O evento é o
@@ -60,25 +46,24 @@ models:
       nenhum, e misturar aprovação com pagamento tornaria a comparação entre
       mecanismos incoerente. Grão: 1 linha por recibo de captação.
 
-      O proponente de cada PRONAC é resolvido por prioridade, com DISTINCT ON:
-      sac__projetos vem primeiro (é a ponte natural, com cgccpf), e
-      sac__tbapiprojetorouanet entra como segunda opção, pelo nrpronac. As
-      duas chegam à mesma chave — anoprojeto || sequencial = nrpronac.
+      O proponente de cada PRONAC vem de sac__projetos (cgccpf), o cadastro
+      oficial do projeto. A chave é anoprojeto || sequencial nas duas tabelas.
 
       O PRONAC NÃO leva LPAD: é ano de 2 dígitos seguido de sequencial de
       largura variável, e preencher com zero à esquerda quebra o casamento
       com sac__captacao.
 
-      Lê a ingestão v1 do SALIC (source `bronze_sac_legado`, schema `bronze`),
-      não a v2 oficial em `salic_bronze`. Migrar é trabalho à parte: a v2 tem
-      571 modelos de bronze e ainda não foi verificado se a captação chega lá
-      com o mesmo grão e a mesma cobertura de 1993 em diante.
+      Lê a ingestão v2 do SALIC (salic_bronze, via bronze_sac_captacao e
+      bronze_sac_projetos). Até 21/10/2026 lia a v1 (schema `bronze`) e usava
+      sac__tbapiprojetorouanet como reserva de proponente; a v2 não ingere
+      essa tabela, e o cadastro sozinho cobria 100% dos recibos válidos em
+      19/08/2026. Recibo cujo PRONAC o cadastro não resolve fica de fora.
     config:
       tags: [silver, agentes, salic, rouanet, meta5]
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — eventos de captação da Lei Rouanet'
-        origem_dados: 'bronze_sac_legado.sac__captacao + sac__projetos + sac__tbapiprojetorouanet'
+        origem_dados: 'bronze_sac.sac__captacao + sac__projetos (salic_bronze, v2)'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier2
@@ -104,9 +89,10 @@ models:
           - not_null
       - name: beneficiario_nome
         description: >
-          Nome do proponente. Só existe quando o casamento veio por
-          sac__tbapiprojetorouanet — a prioridade 1 (sac__projetos) não traz
-          nome e devolve NULL. Não atravessa para int_bbagil_salic_ancine_eventos_fomento.
+          Nome do proponente. Sempre NULL desde a troca para a v2: o cadastro
+          (sac__projetos) não traz o nome, e quem trazia era a reserva
+          sac__tbapiprojetorouanet, que saiu. Fica pelo contrato do modelo e
+          não atravessa para int_bbagil_salic_ancine_eventos_fomento.
         data_type: text
         meta:
           openmetadata:

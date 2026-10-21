@@ -29,7 +29,7 @@ models:
       meta:
         status: Active
         meta_objetivo: 'Meta 5 — espinha de eventos de acesso a fomento federal'
-        origem_dados: 'silver_pagamento_bbagil + silver_legado_sac_captacao_proponente + silver_consulta'
+        origem_dados: 'silver_pagamento_bbagil + silver_sac_captacao_proponente + silver_consulta'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier2

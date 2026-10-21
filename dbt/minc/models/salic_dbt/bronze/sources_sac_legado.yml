@@ -1,8 +1,10 @@
 version: 2
 sources:
-  # Schema `bronze` — saída da ingestão SALIC v1, LEGADA. Mantido só pelas
-  # tabelas que `salic/silver_legado_sac_captacao_proponente` ainda consome e
-  # que não têm equivalente no `salic_bronze` da ingestão v2 (ADR 0005).
+  # Schema `bronze` — saída da ingestão SALIC v1, LEGADA. Desde 21/10/2026
+  # nenhum modelo lê daqui: a Meta 5 (salic/silver_sac_captacao_proponente)
+  # passou para a v2. A declaração fica até se decidir o Bloqueio 2 do
+  # HANDOFF.md (tabelas que só existem na v1) e a saída do schema `bronze`
+  # das recipes do OpenMetadata (ADR 0005).
   # Não declare tabela nova aqui: a bronze nova é `bronze_sac`, em salic_bronze.
   - name: bronze_sac_legado
     schema: bronze

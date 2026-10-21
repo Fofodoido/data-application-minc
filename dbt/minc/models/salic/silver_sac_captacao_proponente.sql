@@ -18,15 +18,18 @@
 -- recebeu). A chave para chegar nele é o PRONAC. Não use ``captacao.idprojeto``:
 -- ele é 0 na maioria das linhas.
 --
--- Usamos DUAS fontes de proponente, nesta ordem:
---   1. ``sac__projetos`` (cadastro oficial do projeto) — carregada em 19/08/2026
---      depois de meses falhando na ingestão. Cobre 100% dos recibos válidos.
---   2. ``sac__tbapiprojetorouanet`` (espelho da API pública) — cobre 99,86%.
---      Fica como reserva: se a carga de sac__projetos regredir, a série não cai.
+-- FONTE: a ingestão SALIC v2 (salic_bronze, via Trino), pelas bronzes
+-- bronze_sac_projetos e bronze_sac_captacao. O proponente vem só de
+-- ``sac__projetos``, o cadastro oficial do projeto, que em 19/08/2026 cobria
+-- 100% dos recibos válidos.
 --
--- As duas concordam em 100,00% dos 195.240 projetos que ambas resolvem — mesmo
--- CPF/CNPJ, sem uma única divergência. Foi essa checagem que validou a ponte,
--- que até 19/08 dependia só do espelho da API.
+-- Até 21/10/2026 este modelo lia a ingestão v1 (schema `bronze`) e tinha o
+-- espelho da API pública (``sac__tbapiprojetorouanet``) como reserva de
+-- proponente. A reserva saiu na troca para a v2, que não ingere essa tabela:
+-- as duas fontes concordavam em 100,00% dos 195.240 projetos que ambas
+-- resolviam, e o cadastro sozinho já resolvia todos. Um recibo cujo PRONAC o
+-- cadastro não resolva fica de fora pelo INNER JOIN abaixo, sem erro: é o
+-- número a conferir depois de cada carga.
 --
 -- JANELA: recibos de 1993 em diante — praticamente toda a vigência da lei
 -- (1991). Diferente do BB Ágil (2023+), a Rouanet aqui quase não tem censura
@@ -34,62 +37,46 @@
 -- falso "novo entrante" do fomento direto.
 
 WITH proponente_bruto AS (
-    -- prioridade 1: cadastro oficial do projeto
     SELECT
-        1 AS prioridade,
         TRIM(anoprojeto) || TRIM(sequencial) AS pronac,
         CASE
             WHEN LENGTH(REGEXP_REPLACE(TRIM(cgccpf), '[^0-9]', '', 'g')) <= 11
                 THEN LPAD(REGEXP_REPLACE(TRIM(cgccpf), '[^0-9]', '', 'g'), 11, '0')
             ELSE LPAD(REGEXP_REPLACE(TRIM(cgccpf), '[^0-9]', '', 'g'), 14, '0')
         END AS beneficiario_documento,
+        -- o cadastro não traz o nome do proponente; a coluna fica pelo
+        -- contrato do modelo
         NULL::TEXT AS beneficiario_nome
-    FROM {{ ref('bronze_legado_sac_projetos') }}
+    FROM {{ ref('bronze_sac_projetos') }}
     WHERE anoprojeto IS NOT NULL
       AND sequencial IS NOT NULL
       AND cgccpf IS NOT NULL
       AND LENGTH(REGEXP_REPLACE(TRIM(cgccpf), '[^0-9]', '', 'g')) BETWEEN 8 AND 14
-
-    UNION ALL
-
-    -- prioridade 2: espelho da API, usado onde o cadastro não resolve
-    SELECT
-        2 AS prioridade,
-        TRIM(nrpronac) AS pronac,
-        CASE
-            WHEN LENGTH(REGEXP_REPLACE(TRIM(nrcnpjcpf), '[^0-9]', '', 'g')) <= 11
-                THEN LPAD(REGEXP_REPLACE(TRIM(nrcnpjcpf), '[^0-9]', '', 'g'), 11, '0')
-            ELSE LPAD(REGEXP_REPLACE(TRIM(nrcnpjcpf), '[^0-9]', '', 'g'), 14, '0')
-        END AS beneficiario_documento,
-        NULLIF(TRIM(nmproponente), '') AS beneficiario_nome
-    FROM {{ ref('bronze_legado_sac_tbapiprojetorouanet') }}
-    WHERE nrpronac IS NOT NULL
-      AND nrcnpjcpf IS NOT NULL
-      AND LENGTH(REGEXP_REPLACE(TRIM(nrcnpjcpf), '[^0-9]', '', 'g')) BETWEEN 8 AND 14
 ),
 
 projeto_proponente AS (
-    -- uma linha por PRONAC: o cadastro ganha da API quando os dois existem
+    -- uma linha por PRONAC
     SELECT DISTINCT ON (pronac) pronac, beneficiario_documento, beneficiario_nome
     FROM proponente_bruto
     WHERE beneficiario_documento IS NOT NULL
       AND beneficiario_documento !~ '^0+$'
-    ORDER BY pronac, prioridade
+    ORDER BY pronac, beneficiario_documento
 ),
 
 recibos AS (
     SELECT
         TRIM(anoprojeto) || TRIM(sequencial) AS pronac,
-        dtrecibo::DATE AS data_evento,
-        captacaoreal::NUMERIC AS valor
-    FROM {{ ref('bronze_legado_sac_captacao') }}
+        TRIM(dtrecibo)::DATE AS data_evento,
+        TRIM(captacaoreal)::NUMERIC AS valor
+    FROM {{ ref('bronze_sac_captacao') }}
     WHERE dtrecibo IS NOT NULL
-      -- as duas colunas são TEXT na bronze; o formato já foi verificado como
-      -- ISO/numérico em 100% das linhas, mas o guarda fica para a ingestão
-      -- não quebrar o modelo silenciosamente se isso mudar
-      AND dtrecibo ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-      AND captacaoreal ~ '^-?[0-9]+(\.[0-9]+)?$'
-      AND captacaoreal::NUMERIC > 0
+      -- as duas colunas são TEXT na bronze. Os guardas são os mesmos das
+      -- macros bronze_timestamp/bronze_numerico da v2 (prefixo ISO na data,
+      -- ponto decimal no valor, com TRIM), para a ingestão não quebrar o
+      -- modelo silenciosamente se o formato mudar
+      AND TRIM(dtrecibo) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+      AND TRIM(captacaoreal) ~ '^-?[0-9]+(\.[0-9]+)?$'
+      AND TRIM(captacaoreal)::NUMERIC > 0
 )
 
 SELECT

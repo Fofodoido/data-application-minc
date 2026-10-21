@@ -2421,8 +2421,8 @@
       "materializacao": "table",
       "depende_de": [
         "silver_consulta",
-        "silver_legado_sac_captacao_proponente",
-        "silver_pagamento_bbagil"
+        "silver_pagamento_bbagil",
+        "silver_sac_captacao_proponente"
       ],
       "sources": [],
       "linhas_sql": 119
@@ -5611,63 +5611,46 @@
       "linhas_sql": 142
     },
     {
-      "nome": "bronze_legado_sac_captacao",
+      "nome": "bronze_sac_captacao",
       "dominio": "salic",
       "camada": "bronze",
       "meta": null,
-      "caminho": "dbt/minc/models/salic/bronze_legado_sac_captacao.sql",
-      "descricao": "Camada Bronze — cópia fiel de bronze.sac__captacao (ingestão SALIC v1), sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como na origem.",
+      "caminho": "dbt/minc/models/salic/bronze_sac_captacao.sql",
+      "descricao": "Camada Bronze — cópia fiel de salic_bronze.sac__captacao (ingestão SALIC v2, via Trino), sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como text, como na origem.",
       "colunas": [],
       "colunas_descritas": 0,
       "testes": 0,
       "materializacao": "",
       "depende_de": [],
       "sources": [
-        "bronze_sac_legado.sac__captacao"
+        "bronze_sac.sac__captacao"
       ],
-      "linhas_sql": 7
+      "linhas_sql": 4
     },
     {
-      "nome": "bronze_legado_sac_projetos",
+      "nome": "bronze_sac_projetos",
       "dominio": "salic",
       "camada": "bronze",
       "meta": null,
-      "caminho": "dbt/minc/models/salic/bronze_legado_sac_projetos.sql",
-      "descricao": "Camada Bronze — cópia fiel de bronze.sac__projetos (ingestão SALIC v1), sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como na origem.",
+      "caminho": "dbt/minc/models/salic/bronze_sac_projetos.sql",
+      "descricao": "Camada Bronze — cópia fiel de salic_bronze.sac__projetos (ingestão SALIC v2, via Trino), sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como text, como na origem.",
       "colunas": [],
       "colunas_descritas": 0,
       "testes": 0,
       "materializacao": "",
       "depende_de": [],
       "sources": [
-        "bronze_sac_legado.sac__projetos"
+        "bronze_sac.sac__projetos"
       ],
-      "linhas_sql": 7
+      "linhas_sql": 4
     },
     {
-      "nome": "bronze_legado_sac_tbapiprojetorouanet",
-      "dominio": "salic",
-      "camada": "bronze",
-      "meta": null,
-      "caminho": "dbt/minc/models/salic/bronze_legado_sac_tbapiprojetorouanet.sql",
-      "descricao": "Camada Bronze — cópia fiel de bronze.sac__tbapiprojetorouanet (ingestão SALIC v1), sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como na origem.",
-      "colunas": [],
-      "colunas_descritas": 0,
-      "testes": 0,
-      "materializacao": "",
-      "depende_de": [],
-      "sources": [
-        "bronze_sac_legado.sac__tbapiprojetorouanet"
-      ],
-      "linhas_sql": 8
-    },
-    {
-      "nome": "silver_legado_sac_captacao_proponente",
+      "nome": "silver_sac_captacao_proponente",
       "dominio": "salic",
       "camada": "silver",
       "meta": null,
-      "caminho": "dbt/minc/models/salic/silver_legado_sac_captacao_proponente.sql",
-      "descricao": "Camada Silver — Meta 5. Um evento por captação real de recurso na Lei Rouanet, no mesmo formato dos pagamentos do BB Ágil. O evento é o recibo de captação (dinheiro efetivamente captado), não a aprovação do projeto: projeto aprovado que nunca captou não deu acesso a recurso nenhum, e misturar aprovação com pagamento tornaria a comparação entre mecanismos incoerente. Grão: 1 linha por recibo de captação.\nO proponente de cada PRONAC é resolvido por prioridade, com DISTINCT ON: sac__projetos vem primeiro (é a ponte natural, com cgccpf), e sac__tbapiprojetorouanet entra como segunda opção, pelo nrpronac. As duas chegam à mesma chave — anoprojeto || sequencial = nrpronac.\nO PRONAC NÃO leva LPAD: é ano de 2 dígitos seguido de sequencial de largura variável, e preencher com zero à esquerda quebra o casamento com sac__captacao.\nLê a ingestão v1 do SALIC (source `bronze_sac_legado`, schema `bronze`), não a v2 oficial em `salic_bronze`. Migrar é trabalho à parte: a v2 tem 571 modelos de bronze e ainda não foi verificado se a captação chega lá com o mesmo grão e a mesma cobertura de 1993 em diante.",
+      "caminho": "dbt/minc/models/salic/silver_sac_captacao_proponente.sql",
+      "descricao": "Camada Silver — Meta 5. Um evento por captação real de recurso na Lei Rouanet, no mesmo formato dos pagamentos do BB Ágil. O evento é o recibo de captação (dinheiro efetivamente captado), não a aprovação do projeto: projeto aprovado que nunca captou não deu acesso a recurso nenhum, e misturar aprovação com pagamento tornaria a comparação entre mecanismos incoerente. Grão: 1 linha por recibo de captação.\nO proponente de cada PRONAC vem de sac__projetos (cgccpf), o cadastro oficial do projeto. A chave é anoprojeto || sequencial nas duas tabelas.\nO PRONAC NÃO leva LPAD: é ano de 2 dígitos seguido de sequencial de largura variável, e preencher com zero à esquerda quebra o casamento com sac__captacao.\nLê a ingestão v2 do SALIC (salic_bronze, via bronze_sac_captacao e bronze_sac_projetos). Até 21/10/2026 lia a v1 (schema `bronze`) e usava sac__tbapiprojetorouanet como reserva de proponente; a v2 não ingere essa tabela, e o cadastro sozinho cobria 100% dos recibos válidos em 19/08/2026. Recibo cujo PRONAC o cadastro não resolve fica de fora.",
       "colunas": [
         {
           "nome": "beneficiario_documento",
@@ -5675,7 +5658,7 @@
         },
         {
           "nome": "beneficiario_nome",
-          "descricao": "Nome do proponente. Só existe quando o casamento veio por sac__tbapiprojetorouanet — a prioridade 1 (sac__projetos) não traz nome e devolve NULL. Não atravessa para int_bbagil_salic_ancine_eventos_fomento."
+          "descricao": "Nome do proponente. Sempre NULL desde a troca para a v2: o cadastro (sac__projetos) não traz o nome, e quem trazia era a reserva sac__tbapiprojetorouanet, que saiu. Fica pelo contrato do modelo e não atravessa para int_bbagil_salic_ancine_eventos_fomento."
         },
         {
           "nome": "programa_fomento",
@@ -5698,12 +5681,11 @@
       "testes": 6,
       "materializacao": "table",
       "depende_de": [
-        "bronze_legado_sac_captacao",
-        "bronze_legado_sac_projetos",
-        "bronze_legado_sac_tbapiprojetorouanet"
+        "bronze_sac_captacao",
+        "bronze_sac_projetos"
       ],
       "sources": [],
-      "linhas_sql": 107
+      "linhas_sql": 94
     },
     {
       "nome": "agentes__agentes",
@@ -42675,7 +42657,7 @@
       "camada": "outros",
       "meta": null,
       "caminho": "dbt/minc/models/salic_dbt/core/fct_captacao_rouanet.sql",
-      "descricao": "Camada Silver / núcleo SALIC. Fato da captação de recurso na Lei Rouanet.\nGRÃO: uma linha por recibo de captação. CHAVE: `id_captacao`. UNIVERSO: todos os recibos de `sac__captacao` com id, data e PRONAC resolvidos. Nenhum corte por ano, valor ou situação do projeto.\nO QUE MEDE: na Rouanet o MinC não repassa dinheiro ao agente — o projeto aprovado capta de um incentivador, que abate o valor do imposto devido. O recibo é o registro de que o recurso entrou, e por isso ele, e não a portaria de aprovação, é a medida de recurso captado das Metas 3 e 5.\nCAPTAÇÃO NÃO É PAGAMENTO: captado, comprovado e pago são três medidas diferentes, e um indicador nunca pode usar uma no numerador e outra no denominador. Este fato responde por captado.\nMEDIDA E UNIDADE: `valor_captado_reais` em reais nominais da data do recibo, sem correção monetária. `valor_captado_ufir` é o mesmo valor na unidade fiscal histórica e só faz sentido para série antiga.\nO MECENAS FICA DE FORA: `cgccpfmecena` identifica o incentivador e não é trazido. No lugar fica `tipo_pessoa_mecenas`, derivado só do comprimento do documento. É o que deixa este fato candidato a publicação depois da validação de segurança; análise por incentivador pede um fato restrito próprio.\nNULOS E DESCONHECIDOS: valor zero ou negativo (estorno) é preservado — filtrar aqui esconderia estorno de quem soma, e a decisão do que entra em cada indicador é do gold, com a regra declarada. Sai apenas o que não identifica evento: recibo sem id, sem data ou sem PRONAC resolvido.\nLIMITAÇÕES: a reconciliação por ano e PRONAC com `salic/silver_legado_sac_captacao_proponente` — que lê a bronze v1, no schema `bronze` — é o gate G3 e ainda não foi feita. Até lá os dois convivem e nenhum substitui o outro. ATUALIZAÇÃO: recalculado a cada `dbt build`.",
+      "descricao": "Camada Silver / núcleo SALIC. Fato da captação de recurso na Lei Rouanet.\nGRÃO: uma linha por recibo de captação. CHAVE: `id_captacao`. UNIVERSO: todos os recibos de `sac__captacao` com id, data e PRONAC resolvidos. Nenhum corte por ano, valor ou situação do projeto.\nO QUE MEDE: na Rouanet o MinC não repassa dinheiro ao agente — o projeto aprovado capta de um incentivador, que abate o valor do imposto devido. O recibo é o registro de que o recurso entrou, e por isso ele, e não a portaria de aprovação, é a medida de recurso captado das Metas 3 e 5.\nCAPTAÇÃO NÃO É PAGAMENTO: captado, comprovado e pago são três medidas diferentes, e um indicador nunca pode usar uma no numerador e outra no denominador. Este fato responde por captado.\nMEDIDA E UNIDADE: `valor_captado_reais` em reais nominais da data do recibo, sem correção monetária. `valor_captado_ufir` é o mesmo valor na unidade fiscal histórica e só faz sentido para série antiga.\nO MECENAS FICA DE FORA: `cgccpfmecena` identifica o incentivador e não é trazido. No lugar fica `tipo_pessoa_mecenas`, derivado só do comprimento do documento. É o que deixa este fato candidato a publicação depois da validação de segurança; análise por incentivador pede um fato restrito próprio.\nNULOS E DESCONHECIDOS: valor zero ou negativo (estorno) é preservado — filtrar aqui esconderia estorno de quem soma, e a decisão do que entra em cada indicador é do gold, com a regra declarada. Sai apenas o que não identifica evento: recibo sem id, sem data ou sem PRONAC resolvido.\nLIMITAÇÕES: a reconciliação por ano e PRONAC com `salic/silver_sac_captacao_proponente` (Meta 5) é o gate G3 e ainda não foi feita. Os dois leem a mesma `sac__captacao` da v2 desde 21/10/2026; até a reconciliação, convivem e nenhum substitui o outro. ATUALIZAÇÃO: recalculado a cada `dbt build`.",
       "colunas": [
         {
           "nome": "id_captacao",
@@ -43904,10 +43886,10 @@
       }
     },
     "salic": {
-      "modelos": 603,
+      "modelos": 602,
       "testes": 4943,
       "camadas": {
-        "bronze": 592,
+        "bronze": 591,
         "silver": 1,
         "outros": 10
       }
@@ -44322,9 +44304,9 @@
     }
   ],
   "totais": {
-    "modelos": 723,
+    "modelos": 722,
     "testes": 5168,
-    "com_descricao": 722,
+    "com_descricao": 721,
     "sources": 79
   }
 }
