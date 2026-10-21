@@ -11,7 +11,14 @@
 -- de valor são regra de negócio e ficam na Gold. Por isso cada linha leva,
 -- além do comum (documento, data, valor), o que a fonte tem para essa
 -- decisão — programa_bruto, beneficiario_nome, beneficiario_documento_bruto,
--- descriptionname, tipo_lancamento —, nulo onde a fonte não tem.
+-- descriptionname, tipo_lancamento, creditdebitindicator,
+-- status_prestacao_contas e a conta (id_plano_acao_dado_bancario) —, nulo
+-- onde a fonte não tem.
+--
+-- As linhas do BB Ágil chegam mesmo sem documento normalizado ou sem data:
+-- elas ainda podem ser o outro lado de um estorno, e a Gold só as descarta
+-- depois de parear (o pareamento é por conta, e precisa das duas pernas).
+-- SALIC e Ancine já chegam com documento e data das suas silvers.
 
 WITH bbagil AS (
     SELECT
@@ -24,7 +31,10 @@ WITH bbagil AS (
         valor,
         tipo_lancamento,
         descriptionname,
+        creditdebitindicator,
+        status_prestacao_contas,
         id_plano_acao,
+        id_plano_acao_dado_bancario,
         NULL::TEXT AS pronac,
         NULL::TEXT AS no_salic
     FROM {{ ref('silver_pagamento_bbagil') }}
@@ -41,7 +51,10 @@ salic AS (
         valor_captado AS valor,
         NULL::TEXT AS tipo_lancamento,
         NULL::TEXT AS descriptionname,
+        NULL::TEXT AS creditdebitindicator,
+        NULL::TEXT AS status_prestacao_contas,
         NULL::INTEGER AS id_plano_acao,
+        NULL::INTEGER AS id_plano_acao_dado_bancario,
         pronac,
         NULL::TEXT AS no_salic
     FROM {{ ref('silver_legado_sac_captacao_proponente') }}
@@ -58,7 +71,10 @@ ancine AS (
         valor_captacao AS valor,
         NULL::TEXT AS tipo_lancamento,
         NULL::TEXT AS descriptionname,
+        NULL::TEXT AS creditdebitindicator,
+        NULL::TEXT AS status_prestacao_contas,
         NULL::INTEGER AS id_plano_acao,
+        NULL::INTEGER AS id_plano_acao_dado_bancario,
         NULL::TEXT AS pronac,
         no_salic
     FROM {{ ref('silver_consulta') }}
@@ -80,16 +96,17 @@ SELECT
     beneficiario_nome,
     CASE
         WHEN LENGTH(beneficiario_documento) = 11 THEN 'PF'
-        ELSE 'PJ'
+        WHEN beneficiario_documento IS NOT NULL THEN 'PJ'
     END AS tipo_pessoa,
     data_evento,
     EXTRACT(YEAR FROM data_evento)::INT AS ano_evento,
     valor,
     tipo_lancamento,
     descriptionname,
+    creditdebitindicator,
+    status_prestacao_contas,
     id_plano_acao,
+    id_plano_acao_dado_bancario,
     pronac,
     no_salic
 FROM unificado
-WHERE beneficiario_documento IS NOT NULL
-  AND data_evento IS NOT NULL

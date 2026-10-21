@@ -21,6 +21,12 @@ models:
       que a fonte tem para essa decisão — programa_bruto, beneficiario_nome,
       beneficiario_documento_bruto, descriptionname, tipo_lancamento —, nulo
       onde a fonte não tem.
+
+      As linhas do BB Ágil chegam mesmo sem documento normalizado, sem data
+      ou sem valor, e com crédito e sublançamento de qualquer status: o
+      pareamento de estorno na Gold é por conta e precisa das duas pernas, e
+      só depois dele a Gold descarta o que não é atribuível a um agente. Por
+      isso os testes de não nulo daqui valem só para SALIC e Ancine.
     config:
       tags: [intermediate, bbagil, salic, ancine]
       meta:
@@ -51,7 +57,9 @@ models:
           'ART25'...). Nulo no SALIC, onde todo evento é Rouanet.
         data_type: text
       - name: beneficiario_documento
-        description: CPF (11) ou CNPJ (14) de quem recebeu, normalizado com LPAD.
+        description: >
+          CPF (11) ou CNPJ (14) de quem recebeu, normalizado com LPAD. Pode ser
+          nulo no BB Ágil (beneficiarypersontype fora de 1/2).
         data_type: text
         meta:
           openmetadata:
@@ -60,7 +68,9 @@ models:
             glossary:
               - MinC.Identificadores.IdentificadorUnico
         tests:
-          - not_null
+          - not_null:
+              config:
+                where: "fonte <> 'BB_AGIL'"
       - name: beneficiario_documento_bruto
         description: >
           Documento como o BB Ágil devolve, sem zero à esquerda. É onde a Gold
@@ -81,10 +91,12 @@ models:
             tags:
               - PII.NonSensitive
       - name: tipo_pessoa
-        description: "'PF' (11 dígitos) ou 'PJ' (14)."
+        description: "'PF' (11 dígitos) ou 'PJ' (14). Nulo quando o documento é nulo."
         data_type: text
         tests:
-          - not_null
+          - not_null:
+              config:
+                where: "fonte <> 'BB_AGIL'"
           - accepted_values:
               arguments:
                 values: ['PF', 'PJ']
@@ -94,12 +106,16 @@ models:
           recibo na Rouanet, da captação na Ancine.
         data_type: date
         tests:
-          - not_null
+          - not_null:
+              config:
+                where: "fonte <> 'BB_AGIL'"
       - name: ano_evento
         description: Ano civil de data_evento.
         data_type: integer
         tests:
-          - not_null
+          - not_null:
+              config:
+                where: "fonte <> 'BB_AGIL'"
       - name: valor
         description: Valor do evento, em reais, como a fonte registra.
         data_type: numeric
@@ -113,6 +129,17 @@ models:
           Descrição do lançamento no extrato do BB Ágil. Nula no sublançamento
           e nas outras fontes.
         data_type: text
+      - name: creditdebitindicator
+        description: >
+          No extrato do BB Ágil, 'D' (débito) ou 'C' (crédito); a Gold usa para
+          parear estorno e ficar só com o débito. Nulo no sublançamento e nas
+          outras fontes.
+        data_type: text
+      - name: status_prestacao_contas
+        description: >
+          No sublançamento do BB Ágil, o status na prestação de contas ('Pago'
+          é o que chegou ao beneficiário). Nulo no extrato e nas outras fontes.
+        data_type: text
       - name: id_plano_acao
         description: Plano de ação dono da conta, no BB Ágil. Nulo nas outras fontes.
         data_type: integer
@@ -120,6 +147,11 @@ models:
           openmetadata:
             glossary:
               - MinC.Identificadores.IdPlanoAcao
+      - name: id_plano_acao_dado_bancario
+        description: >
+          A conta bancária, no BB Ágil — chave do pareamento de estorno na
+          Gold, que acontece dentro de uma conta só. Nulo nas outras fontes.
+        data_type: integer
       - name: pronac
         description: PRONAC do projeto, no SALIC. Nulo nas outras fontes.
         data_type: text
@@ -140,6 +172,17 @@ models:
       silver_planilha_contemplados.
     config:
       tags: [intermediate, bbagil, salic, ancine, transferegov, contemplados]
+      meta:
+        status: Disabled
+        origem_dados: 'int_ancine_bbagil_salic + silver_planilha_contemplados'
+        openmetadata:
+          domain: Cultura.Fomento Direto
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+          tags:
+            - Certification.Silver
+          glossary:
+            - MinC.Agentes.Contemplado
     columns:
       - name: contemplado_lpg
         description: >

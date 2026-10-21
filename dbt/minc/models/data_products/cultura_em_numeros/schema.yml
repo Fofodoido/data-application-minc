@@ -21,7 +21,10 @@ models:
       data, valor).
 
       Lê int_ancine_bbagil_salic, que só junta as fontes, e concentra a regra
-      de negócio de quem conta (ADR 0010): no BB Ágil, fora repasse a ente
+      de negócio (ADR 0010). O que é pagamento efetivo: no extrato do BB
+      Ágil, só o débito e fora os dois lados de um estorno (débito e crédito
+      da mesma conta, documento e valor); no sublançamento, só o status
+      'Pago'. Quem conta: no BB Ágil, fora repasse a ente
       público, devolução ao FNC, transferência ao Banco do Brasil e
       lançamento interno, com a política (LPG, PNAB, LAB) derivada do código
       do programa; na Ancine, só FSA e o fomento federal ao audiovisual
@@ -44,7 +47,7 @@ models:
         origem_dados: 'int_ancine_bbagil_salic'
         openmetadata:
           domain: Cultura.Fomento Direto
-          tier: Tier.Tier2
+          tier: Tier.Tier1
           owner: minc-data-engineering
           tags:
             - Certification.Gold

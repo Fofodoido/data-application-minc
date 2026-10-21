@@ -1,13 +1,16 @@
 {{ config(materialized='table') }}
 
--- Silver — sublançamentos pagos do BB Gestão Ágil, usados quando a
--- transação-mãe do extrato tem subtransactionquantity > 0 (o beneficiário
--- real do pagamento só aparece aqui, não na linha agregada do extrato). Lê as
+-- Silver — sublançamentos do BB Gestão Ágil, usados quando a transação-mãe
+-- do extrato tem subtransactionquantity > 0 (o beneficiário real do
+-- pagamento só aparece aqui, não na linha agregada do extrato). Lê as
 -- silvers tipadas e só limpa:
 --   1. descarta beneficiário ausente (documento nulo ou '0').
---   2. fica só o sublançamento com status 'Pago' (accountability): os outros
---      não chegaram ao beneficiário.
---   3. valor em módulo (subtransação pode vir negativa na fonte).
+--   2. valor em módulo (subtransação pode vir negativa na fonte).
+--
+-- Todos os status ficam, em status_prestacao_contas
+-- (subtransactionaccountabilityname): recortar o 'Pago', o sublançamento que
+-- chegou ao beneficiário, é regra de elegibilidade e mora na Gold
+-- (eixo2_meta5_evento_fomento, ADR 0010).
 --
 -- Repasse a ente público continua aqui, com beneficiario_nome, para a Gold
 -- decidir (ADR 0010, regra de negócio só na Gold).
@@ -36,7 +39,8 @@ SELECT
     END AS beneficiario_documento,
     s.beneficiaryname AS beneficiario_nome,
     ABS({{ bronze_numerico("s.value") }}) AS valor,
-    TO_DATE(s.paymentdate, 'DD/MM/YYYY') AS data_pagamento
+    {{ data_texto('s.paymentdate') }} AS data_pagamento,
+    s.subtransactionaccountabilityname AS status_prestacao_contas
 FROM {{ ref('silver_subtransacao_bbagil') }} s
 JOIN {{ ref('silver_extrato_bbagil') }} e
     ON {{ bronze_inteiro("s.id_plano_acao") }} = e.id_plano_acao
@@ -44,4 +48,3 @@ JOIN {{ ref('silver_extrato_bbagil') }} e
     AND {{ bronze_inteiro("s.id_transacao_pai", "bigint") }} = e.id
 WHERE s.beneficiarydocumentid IS NOT NULL
   AND s.beneficiarydocumentid != '0'
-  AND s.subtransactionaccountabilityname = 'Pago'

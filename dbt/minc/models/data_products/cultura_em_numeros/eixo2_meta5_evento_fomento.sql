@@ -8,14 +8,28 @@
 -- contemplados", sem qualificar por programa).
 --
 -- Lê int_ancine_bbagil_salic, que só junta as fontes, e aplica aqui TODA a
--- regra de negócio de quem conta (ADR 0010, regra de negócio só na Gold). As
--- demais golds da meta derivam desta e de eixo2_meta5_primeiro_acesso_agente.
+-- regra de negócio — o que é pagamento efetivo e quem conta (ADR 0010,
+-- regra de negócio só na Gold). As demais golds da meta derivam desta e de
+-- eixo2_meta5_primeiro_acesso_agente.
 --
 -- Grão: 1 linha por (documento, mecanismo, data do evento, valor).
 --
 -- QUEM CONTA, POR FONTE
 --
--- BB Ágil — pagamento a agente cultural. Porta os critérios de
+-- BB Ágil — pagamento a agente cultural. Primeiro, o que é pagamento
+-- efetivo:
+--   • no extrato, só o débito (a saída de dinheiro da conta), e fora os dois
+--     lados de um estorno: débito e crédito da MESMA CONTA com o mesmo
+--     documento e o mesmo valor. A chave é a conta, não o plano de ação: um
+--     plano tem mais de uma conta (os da LPG têm duas) e estorno acontece
+--     dentro de uma conta só. Casando no nível do plano, um débito da conta A
+--     e um crédito da conta B viram "par" e os DOIS lados são descartados —
+--     perda silenciosa de pagamento real. O pareamento roda antes de
+--     descartar linha sem documento normalizado ou sem data, como rodava
+--     quando morava na silver: uma perna sem data ainda anula a outra.
+--   • no sublançamento, só o status 'Pago' (status_prestacao_contas): os
+--     outros não chegaram ao beneficiário.
+-- Depois, quem conta, portando os critérios de
 -- plugins/regras_negocio_bbagil.py (módulo órfão, mantido como referência):
 --   • fora repasse entre entes públicos: nome do beneficiário começando com
 --     MUNICIPIO/ESTADO/FUNDO/SECRETARIA/SEFAZ é repasse administrativo, não
@@ -79,7 +93,50 @@
 -- transforma veterano em falso novo entrante, nunca o contrário — então os
 -- percentuais desta série são TETO, e cada fonte nova só pode derrubá-los.
 
-WITH elegivel AS (
+WITH eventos AS (
+    SELECT * FROM {{ ref('int_ancine_bbagil_salic') }}
+),
+
+-- chaves (conta + documento bruto + valor) que aparecem no extrato como
+-- débito E crédito: estorno/devolução. INTERSECT, e não join, para que valor
+-- nulo também case com valor nulo, como casava na silver
+chaves_estorno AS (
+    SELECT id_plano_acao, id_plano_acao_dado_bancario, beneficiario_documento_bruto, valor
+    FROM eventos
+    WHERE fonte = 'BB_AGIL' AND tipo_lancamento = 'extrato' AND creditdebitindicator = 'D'
+    INTERSECT
+    SELECT id_plano_acao, id_plano_acao_dado_bancario, beneficiario_documento_bruto, valor
+    FROM eventos
+    WHERE fonte = 'BB_AGIL' AND tipo_lancamento = 'extrato' AND creditdebitindicator = 'C'
+),
+
+pagamento_efetivo AS (
+    SELECT e.*
+    FROM eventos e
+    LEFT JOIN chaves_estorno ce
+        ON e.tipo_lancamento = 'extrato'
+        AND e.id_plano_acao = ce.id_plano_acao
+        AND e.id_plano_acao_dado_bancario = ce.id_plano_acao_dado_bancario
+        AND e.beneficiario_documento_bruto = ce.beneficiario_documento_bruto
+        AND e.valor = ce.valor
+    WHERE
+        (
+            e.fonte <> 'BB_AGIL'
+            OR (
+                e.tipo_lancamento = 'extrato'
+                AND e.creditdebitindicator = 'D'
+                AND ce.id_plano_acao IS NULL
+            )
+            OR (e.tipo_lancamento = 'subtransacao' AND e.status_prestacao_contas = 'Pago')
+        )
+        -- só depois de parear: sem documento, data ou valor o evento não é
+        -- atribuível a um agente, a um ano nem ao piso
+        AND e.beneficiario_documento IS NOT NULL
+        AND e.data_evento IS NOT NULL
+        AND e.valor IS NOT NULL
+),
+
+elegivel AS (
     SELECT
         beneficiario_documento,
         tipo_pessoa,
@@ -110,7 +167,7 @@ WITH elegivel AS (
                 AND UPPER(TRANSLATE(programa_bruto, '_ ', '--')) LIKE '%A-BLANC%'
                 THEN 'LAB'
         END AS programa_fomento
-    FROM {{ ref('int_ancine_bbagil_salic') }}
+    FROM pagamento_efetivo
     WHERE
         (fonte IN ('SALIC', 'ANCINE') AND valor > 0)
         OR (

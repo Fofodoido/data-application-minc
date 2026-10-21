@@ -2,9 +2,10 @@ version: 2
 
 # BB Ágil, na estrutura do ADR 0010: bronze_<tabela> é a cópia fiel do que a
 # extracao_bbagil_dag grava em bbagil.<tabela>; silver_<tabela> tipa. Os
-# silver_pagamento_* (Meta 5) também leem a bronze, e não a silver tipada, para
-# que os filtros sobre texto ('0', '191') fiquem exatamente como eram no
-# agentes_dbt -- a migração não mudou regra nem número.
+# silver_pagamento_* (Meta 5) leem a silver tipada (silver_extrato_bbagil e
+# silver_subtransacao_bbagil) e só limpam: o que é pagamento efetivo (estorno,
+# só débito, status 'Pago') e quem conta como agente cultural é regra de
+# negócio e mora na Gold eixo2_meta5_evento_fomento.
 models:
   - name: bronze_controle_extracao_bbagil_extrato
     description: >
@@ -153,7 +154,7 @@ models:
 
   - name: silver_extrato_bbagil
     description: >
-      Camada silver tipada de bbagil.extrato_bbagil, lida de bronze_extrato_bbagil. 42 colunas, 23 com cast aplicado.
+      Camada silver tipada de bbagil.extrato_bbagil, lida de bronze_extrato_bbagil. 42 colunas, 22 com cast aplicado.
     config:
       tags:
         - silver
@@ -558,23 +559,23 @@ models:
 
   - name: silver_pagamento_extrato_bbagil
     description: >
-      Camada Silver — saídas de dinheiro do extrato bancário do BB Gestão
-      Ágil: lançamentos a débito, sem subtransação, com beneficiário
-      identificado e sem os dois lados de um estorno. Lê a
+      Camada Silver — lançamentos do extrato bancário do BB Gestão Ágil,
+      débito e crédito, sem subtransação e com beneficiário informado. Lê a
       silver_extrato_bbagil e só limpa.
 
-      Grão: 1 linha por transação de débito do extrato — a chave da origem é
+      Grão: 1 linha por transação do extrato — a chave da origem é
       (id_plano_acao, id_plano_acao_dado_bancario, id). Transações com
       subtransactionquantity > 0 ficam fora de propósito: nelas o
       beneficiário real só aparece no sublançamento, e quem os traz é
       silver_pagamento_subtransacao_bbagil.
 
-      O par débito/crédito de mesmo valor, mesmo documento e mesma conta é
-      lido como estorno e removido dos dois lados.
-
-      Quem conta como pagamento a agente cultural não é decidido aqui:
-      repasse a ente público, devolução ao FNC, transferência ao Banco do
-      Brasil e lançamento interno continuam na tabela, para a Gold filtrar.
+      O que é pagamento efetivo não é decidido aqui: o crédito fica, com
+      creditdebitindicator e a chave do pareamento (conta, documento bruto,
+      valor), e a Gold eixo2_meta5_evento_fomento descarta os dois lados de
+      um estorno e fica só com o débito. Quem conta como pagamento a agente
+      cultural também não: repasse a ente público, devolução ao FNC,
+      transferência ao Banco do Brasil e lançamento interno continuam na
+      tabela, para a Gold filtrar.
     config:
       tags: [silver, bbagil]
       meta:
@@ -647,7 +648,11 @@ models:
             glossary:
               - MinC.Identificadores.IdentificadorUnico
         tests:
-          - not_null
+          # nulo quando beneficiarypersontype não é 1 nem 2; a linha fica
+          # para o pareamento de estorno, e a Gold a descarta depois
+          - not_null:
+              config:
+                severity: warn
       - name: beneficiario_nome
         description: >
           Nome do beneficiário, como o BSC devolve. É nele que a Gold reconhece
@@ -663,27 +668,40 @@ models:
           lançamento interno da conta (aplicação, resgate, imposto, ordem
           bancária cancelada).
         data_type: text
+      - name: creditdebitindicator
+        description: >
+          'D' (débito, saída de dinheiro da conta) ou 'C' (crédito). A Gold
+          usa para parear estorno e para ficar só com o débito.
+        data_type: text
       - name: valor
         description: >
-          Valor do pagamento (débito), em reais.
+          Valor do lançamento, em reais, como a origem registra.
         data_type: numeric
         tests:
-          - not_null
+          # nulo quando o valor da origem está fora do padrão numérico; aviso
+          # para conferir a origem, e a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
       - name: data_pagamento
         description: >
           Data do lançamento, convertida para DATE.
         data_type: date
         tests:
-          - not_null
+          # nulo quando a data está vazia ou não é data de calendário
+          # (macro data_texto); a Gold descarta depois de parear o estorno
+          - not_null:
+              config:
+                severity: warn
 
   - name: silver_pagamento_subtransacao_bbagil
     description: >
-      Camada Silver — sublançamentos pagos do BB Gestão Ágil, usados quando
-      a transação-mãe do extrato tem subtransactionquantity > 0 (o
-      beneficiário real só aparece aqui). Fica só o status 'Pago', com
-      beneficiário identificado.
+      Camada Silver — sublançamentos do BB Gestão Ágil, usados quando a
+      transação-mãe do extrato tem subtransactionquantity > 0 (o
+      beneficiário real só aparece aqui), com beneficiário informado. Todos
+      os status ficam: o recorte do 'Pago' é da Gold.
 
-      Grão: 1 linha por sublançamento pago. Complementa
+      Grão: 1 linha por sublançamento. Complementa
       silver_pagamento_extrato_bbagil sem sobrepô-lo; os dois juntos formam
       silver_pagamento_bbagil.
 
@@ -755,7 +773,11 @@ models:
             glossary:
               - MinC.Identificadores.IdentificadorUnico
         tests:
-          - not_null
+          # nulo quando beneficiarypersontype não é 1 nem 2; aviso para
+          # conferir a origem, e a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
       - name: beneficiario_nome
         description: >
           Nome do beneficiário, como o BSC devolve. É nele que a Gold reconhece
@@ -770,24 +792,39 @@ models:
           Valor do sublançamento (em módulo), em reais.
         data_type: numeric
         tests:
-          - not_null
+          # nulo quando o valor da origem está fora do padrão numérico; aviso
+          # para conferir a origem, e a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
       - name: data_pagamento
         description: >
           Data do lançamento, convertida para DATE.
         data_type: date
         tests:
-          - not_null
+          # nulo quando a data está vazia ou não é data de calendário
+          # (macro data_texto); a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
+      - name: status_prestacao_contas
+        description: >
+          Status do sublançamento na prestação de contas
+          (subtransactionaccountabilityname). 'Pago' é o que chegou ao
+          beneficiário; a Gold fica só com ele.
+        data_type: text
 
   - name: silver_pagamento_bbagil
     description: >
       Camada Silver — une silver_pagamento_extrato_bbagil e
-      silver_pagamento_subtransacao_bbagil em 1 linha por saída de dinheiro
-      para um beneficiário identificado, com tipo_lancamento dizendo de qual
-      lado a linha veio.
+      silver_pagamento_subtransacao_bbagil em 1 linha por movimento de
+      dinheiro com beneficiário informado, com tipo_lancamento dizendo de
+      qual lado a linha veio.
 
-      Não classifica programa nem decide quem conta como agente cultural: o
-      código do programa sai como o BSC devolve, com as colunas que os
-      filtros de negócio da Gold usam. Alimenta int_ancine_bbagil_salic.
+      Não decide o que é pagamento efetivo (estorno, só débito, status
+      'Pago'), não classifica programa nem decide quem conta como agente
+      cultural: as linhas saem como a limpeza deixou, com as colunas que a
+      Gold usa para essas decisões. Alimenta int_ancine_bbagil_salic.
     config:
       tags: [silver, bbagil]
       meta:
@@ -862,7 +899,11 @@ models:
             glossary:
               - MinC.Identificadores.IdentificadorUnico
         tests:
-          - not_null
+          # nulo quando beneficiarypersontype não é 1 nem 2; a linha fica
+          # para o pareamento de estorno, e a Gold a descarta depois
+          - not_null:
+              config:
+                severity: warn
       - name: beneficiario_nome
         description: >
           Nome do beneficiário, como o BSC devolve. É nele que a Gold reconhece
@@ -878,15 +919,33 @@ models:
           lançamento interno da conta (aplicação, resgate, imposto, ordem
           bancária cancelada).
         data_type: text
+      - name: creditdebitindicator
+        description: >
+          No extrato, 'D' (débito) ou 'C' (crédito). Nulo no sublançamento,
+          que é sempre saída para o beneficiário.
+        data_type: text
+      - name: status_prestacao_contas
+        description: >
+          No sublançamento, o status na prestação de contas ('Pago' é o que
+          chegou ao beneficiário). Nulo no extrato.
+        data_type: text
       - name: valor
         description: >
-          Valor do pagamento, em reais.
+          Valor do lançamento, em reais.
         data_type: numeric
         tests:
-          - not_null
+          # nulo quando o valor da origem está fora do padrão numérico; aviso
+          # para conferir a origem, e a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
       - name: data_pagamento
         description: >
           Data do lançamento, convertida para DATE.
         data_type: date
         tests:
-          - not_null
+          # nulo quando a data está vazia ou não é data de calendário
+          # (macro data_texto); a Gold descarta depois de parear o estorno
+          - not_null:
+              config:
+                severity: warn
