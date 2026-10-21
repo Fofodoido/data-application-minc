@@ -96,12 +96,16 @@ models:
     transferegov_bronze:
       +materialized: view
       +schema: transferegov_bronze
-    ibge_sidra_bronze:
+    # SIDRA/IBGE e SGS/Bacen ja na estrutura do ADR 0010: pasta por fonte,
+    # bronze_<tabela> copia fiel e silver_<tabela> com o cast. Caem no MESMO
+    # schema da tabela que a ingestao grava (bacen.serie_sgs), e nao colidem
+    # porque todo modelo comeca com bronze_ ou silver_.
+    ibge_sidra:
+      +schema: ibge_sidra
       +materialized: view
-      +schema: ibge_sidra_bronze
-    bacen_bronze:
+    bacen:
+      +schema: bacen
       +materialized: view
-      +schema: bacen_bronze
     bbagil_bronze:
       +materialized: view
       +schema: bbagil_bronze

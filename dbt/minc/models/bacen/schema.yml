@@ -1,12 +1,28 @@
 version: 2
 
+# bacen, na estrutura do ADR 0010: bronze_<tabela> é a cópia fiel do que a
+# bacen_sgs_ingest_dag grava em bacen.<tabela>; silver_<tabela> tipa.
 models:
-  - name: serie_sgs
+  - name: bronze_serie_sgs
     description: >
-      Camada bronze tipada de bacen.serie_sgs. 5 colunas, 2 com cast aplicado.
+      Camada Bronze — cópia fiel de bacen.serie_sgs, sem cast, filtro nem join
+      (ADR 0010). Todas as colunas chegam como na origem.
     config:
       tags:
         - bronze
+        - bacen
+    meta:
+      openmetadata:
+        domain: Cultura.Indicadores
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: silver_serie_sgs
+    description: >
+      Camada silver tipada de bacen.serie_sgs, lida de bronze_serie_sgs. 5 colunas, 2 com cast aplicado.
+    config:
+      tags:
+        - silver
         - bacen
     meta:
       openmetadata:
