@@ -48,7 +48,10 @@ models:
       oficial do projeto. O PRONAC sai da macro pronac_de_ano_sequencial nas
       duas tabelas, a mesma do fct_captacao_rouanet. Recibo cujo PRONAC o
       cadastro não resolve fica de fora sem erro; o teste singular
-      salic_recibo_sem_proponente (severity warn) avisa quando acontece.
+      salic_recibo_sem_proponente (severity warn) avisa por PRONAC, separando
+      PRONAC malformado de ausente do cadastro, e o
+      salic_recibo_sem_proponente_em_massa (severity error) trava o build
+      quando a perda passa de 1% dos recibos.
 
       Lê a ingestão v2 do SALIC (salic_bronze). Até 21/10/2026 lia a v1
       (schema `bronze`) e usava sac__tbapiprojetorouanet como reserva de

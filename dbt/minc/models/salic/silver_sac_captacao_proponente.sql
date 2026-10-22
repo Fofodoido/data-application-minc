@@ -25,7 +25,8 @@
 -- as duas fontes concordavam em 100,00% dos 195.240 projetos que ambas
 -- resolviam, e o cadastro sozinho já resolvia todos. Um recibo cujo PRONAC o
 -- cadastro não resolva fica de fora pelo INNER JOIN abaixo, sem erro; o teste
--- singular salic_recibo_sem_proponente avisa quando isso acontece.
+-- singular salic_recibo_sem_proponente avisa quando isso acontece, e o
+-- salic_recibo_sem_proponente_em_massa trava o build se a perda for grande.
 --
 -- JANELA: recibos de 1993 em diante — praticamente toda a vigência da lei
 -- (1991).
