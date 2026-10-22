@@ -61,6 +61,15 @@ bronze. A pasta de um run tem só o que aquele run processou: quem consome preci
 ler todos os eventos recebidos, não só o mais novo. A task
 ``falhar_se_algo_falhou`` deixa o run vermelho quando qualquer task falha.
 
+Agendamento: o ``@hourly`` não é uma coleta por hora. Com um run por vez e uma
+task por vez, as 7 tasks de ingestão (extrato e 6 fatos) rodam em série, até
+``max_run_minutes`` cada: com fila cheia, um run leva de 5 a 6 horas. Com
+``max_active_runs=1`` e ``catchup=False``, o scheduler não acumula runs: quando um
+termina, ele cria logo o do intervalo mais recente. Na prática a DAG roda sem
+parar enquanto há fila, e de hora em hora quando a fila está vazia (aí o run
+termina em minutos). A vazão é a mesma de rodar em paralelo, porque a API limita
+tudo a 1 req/s.
+
 Precisa das conexões ``minio_datalakehouse`` e ``trino_default`` no Airflow.
 """
 
@@ -283,6 +292,8 @@ def _anunciar(endpoint: str) -> str:
 
 @dag(
     dag_id="siconfi_ingestion_dag",
+    # Não é uma coleta por hora: com fila cheia cada run leva horas, e o próximo
+    # sai assim que ele termina. Ver "Agendamento" no topo.
     schedule=get_dynamic_schedule("siconfi_ingestion_dag", default="@hourly"),
     start_date=datetime(2026, 1, 1),
     catchup=False,

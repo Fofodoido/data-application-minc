@@ -22,7 +22,8 @@ baixado. E só com a versão nova da ingestão no ar: enquanto a antiga gravar n
 Cada task para em ``max_run_minutes`` e guarda o progresso. Dispare de novo até a
 task ``conferir`` registrar tudo como ``completo``. Ela compara a origem com os
 arquivos de verdade no raw, por pasta de run, e falha se uma tabela dada como
-copiada não tiver os arquivos esperados. A task ``falhar_se_algo_falhou`` deixa o
+copiada não tiver os arquivos esperados, ou se a fila convertida tiver menos
+unidades que a antiga. A task ``falhar_se_algo_falhou`` deixa o
 run vermelho quando uma cópia falha.
 
 No servidor, ``conn_origem`` é a própria ``postgres_default``. Para testar no
@@ -44,6 +45,7 @@ from siconfi_controle import controle_do_airflow
 from siconfi_migracao import (
     ENDPOINTS,
     ProgressoPostgres,
+    avaliar_fila,
     avaliar_tabela,
     conexao_origem,
     contagem_da_fila_antiga,
@@ -55,7 +57,6 @@ from siconfi_migracao import (
     migrar_endpoint,
     objetos_dos_runs,
     runs_na_origem,
-    status_da_fila_antiga,
     tabela_antiga,
     tabela_existe,
     total_na_origem,
@@ -139,11 +140,11 @@ def _conferir() -> dict[str, Any]:
                 objetos_no_raw=objetos_dos_runs(endpoint, runs),
             )
         if fila_existe(conn):
-            relatorio["fila"] = {
-                "antiga": status_da_fila_antiga(contagem_da_fila_antiga(conn)),
-                "nova": controle_do_airflow().latest_status_counts(),
-                "convertidas": progresso.ler_fila()[2],
-            }
+            relatorio["fila"] = avaliar_fila(
+                contagem_da_fila_antiga(conn),
+                progresso.ler_fila()[2],
+                controle_do_airflow().latest_status_counts(),
+            )
     for nome, linha in relatorio.items():
         logger.info("[siconfi] %s: %s", nome, linha)
     inconsistentes = [
@@ -151,7 +152,8 @@ def _conferir() -> dict[str, Any]:
     ]
     if inconsistentes:
         raise AirflowFailException(
-            f"cópia sem os arquivos esperados no raw: {inconsistentes}"
+            f"conversão inconsistente (arquivo faltando no raw ou unidade "
+            f"faltando no controle): {inconsistentes}"
         )
     return relatorio
 

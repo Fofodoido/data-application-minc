@@ -20,6 +20,12 @@ Sem trava de linha, a garantia de que duas tasks não processam a mesma unidade
 vem da DAG: uma task por endpoint, um run por vez e uma task por vez
 (``max_active_tasks=1``). As leituras que precisam de ``DISTINCT ON`` saem pela
 table function ``system.query`` do conector, que executa SQL nativo no Postgres.
+
+O ``CREATE TABLE`` do Trino não cria índice. Os índices que essas leituras usam
+são criados pela procedure ``system.execute`` do conector, que repassa o
+``CREATE INDEX`` ao Postgres -- também pelo Trino, sem ``psycopg2``. Sem eles,
+cada consulta da fila e cada lote do planejamento varrem a tabela inteira, e
+``siconfi_work_events`` só cresce.
 """
 
 from __future__ import annotations
@@ -58,6 +64,15 @@ _DDL = {
     PLAN_KEYS: """(
         source varchar, scope_hash varchar, key varchar,
         planned_at timestamp(6) with time zone)""",
+}
+# Um índice por consulta: a unidade vigente por chave (``DISTINCT ON (work_key)
+# ... ORDER BY work_key, planned_at DESC``), o último evento por revisão, os
+# arquivos já planejados por recorte e o último refresh de cada referência.
+_INDICES = {
+    UNITS: "(endpoint, work_key, planned_at DESC)",
+    EVENTS: "(endpoint, work_key, revision_marker, event_at DESC)",
+    PLAN_KEYS: "(source, scope_hash)",
+    REFERENCE: "(endpoint, refreshed_at DESC)",
 }
 
 
@@ -170,6 +185,15 @@ class SiconfiControle:
         )
         for tabela, colunas in _DDL.items():
             self.executor.run(f"CREATE TABLE IF NOT EXISTS {self._t(tabela)} {colunas}")
+        for tabela, colunas in _INDICES.items():
+            self.executor.run(
+                f"CALL {quote_ident(self.catalog)}.system.execute(query => "
+                + sql_literal(
+                    f"CREATE INDEX IF NOT EXISTS {tabela}_busca_idx "
+                    f"ON {self._pg(tabela)} {colunas}"
+                )
+                + ")"
+            )
 
     # ── fila ─────────────────────────────────────────────────────────────
 

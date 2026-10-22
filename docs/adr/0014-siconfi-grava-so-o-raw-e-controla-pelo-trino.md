@@ -1,6 +1,6 @@
 # ADR 0014 — A ingestão do SICONFI grava só o raw no MinIO e controla a fila pelo Trino
 
-- Status: aceito
+- Status: proposto (até a aprovação do PR #86)
 - Data: 2026-10-21
 - Escopo: `dags/data_ingest/siconfi/`, `plugins/siconfi_storage.py`,
   `plugins/siconfi_controle.py`, `plugins/siconfi_migracao.py`,
@@ -59,6 +59,13 @@ Uma unidade está pendente enquanto a revisão vigente dela não tem evento fina
 As leituras que precisam de `DISTINCT ON` saem pela table function
 `system.query`, que executa SQL nativo no Postgres. Nenhuma linha é atualizada
 ou apagada.
+
+O `CREATE TABLE` do Trino não cria índice. Os quatro índices que essas leituras
+usam são criados pela procedure `system.execute` do conector, que repassa o
+`CREATE INDEX IF NOT EXISTS` ao Postgres, também pelo Trino. Medido em
+22/10/2026 com 397 mil unidades: a fila pendente da MSC caiu de 1,3 s para
+0,5 s e a contagem por estado, de 3,8 s para 0,9 s. A consulta do planejamento
+passou a usar o índice (10 ms no Postgres, mais o custo fixo do Trino).
 
 **Um consumidor por fila, em vez de trava de linha.** A DAG roda um run por vez
 e uma task por vez (`max_active_tasks=1`). Isso garante que duas tasks nunca
@@ -142,9 +149,14 @@ unidades, todas já na fila e nenhuma com marcador de revisão diferente.
 - **Página vazia também vira arquivo.** Uma unidade `no_data` grava um JSON
   pequeno; na MSC isso pode chegar a centenas de milhares de arquivos. Fica
   assim por enquanto, porque o arquivo é a prova de que a requisição foi feita.
-- **A ingestão roda em série.** Se um dia a API do Tesouro aceitar mais de 1
-  req/s, paralelizar exige trava ou um consumidor por fila, não só tirar o
-  `max_active_tasks`.
+- **A ingestão roda em série.** Com fila cheia, um run leva de 5 a 6 horas (7
+  tasks de ingestão de até `max_run_minutes`). O `@hourly` deixa de ser uma
+  coleta por hora: com um run por vez e `catchup=False`, o próximo sai assim que
+  o anterior termina, e de hora em hora só quando a fila está vazia. Se um dia a API do
+  Tesouro aceitar mais de 1 req/s, paralelizar exige trava ou um consumidor por
+  fila, não só tirar o `max_active_tasks`.
+- **O retry não tem limite de tentativas**, como já não tinha antes: uma unidade
+  com erro recuperável volta à fila 5 minutos depois, indefinidamente.
 - **O TransfereGov e o INEP continuam com staging** (ADR 0011 e 0012). Se o
   "sem staging" do ADR 0009 valer para todos, cabe um ADR que substitua os dois.
 - **`docs/siconfi-migracao-raw-pages.sql`** e os schemas `siconfi_bronze` e

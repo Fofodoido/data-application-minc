@@ -73,7 +73,11 @@ def test_controle_so_cria_e_insere() -> None:
     controle, trino = _controle()
     _todos_os_metodos(controle)
     for sql in trino.executados:
-        assert sql.split()[0] in {"CREATE", "INSERT"}, sql
+        if sql.startswith("CALL"):
+            # A única coisa que vai direto ao Postgres é a criação de índice.
+            assert "system.execute" in sql and "CREATE INDEX IF NOT EXISTS" in sql
+        else:
+            assert sql.split()[0] in {"CREATE", "INSERT"}, sql
     for sql in trino.executados + trino.lidos:
         for proibido in ("UPDATE ", "DELETE ", "MERGE ", "ON CONFLICT", "FOR UPDATE"):
             assert proibido not in sql.upper(), sql
@@ -83,7 +87,7 @@ def test_tabelas_saem_no_catalogo_e_schema_configurados() -> None:
     controle, trino = _controle()
     controle.ensure_tables()
     assert trino.executados[0] == 'CREATE SCHEMA IF NOT EXISTS "dw"."control"'
-    criadas = {sql.split()[5] for sql in trino.executados[1:]}
+    criadas = {sql.split()[5] for sql in trino.executados[1:] if "TABLE" in sql[:13]}
     assert criadas == {
         f'"dw"."control".{t}'
         for t in (
@@ -93,6 +97,28 @@ def test_tabelas_saem_no_catalogo_e_schema_configurados() -> None:
             "siconfi_plan_keys",
         )
     }
+
+
+def test_cada_consulta_tem_o_seu_indice_criado_pelo_trino() -> None:
+    """O CREATE TABLE do Trino não cria índice; sem eles, a fila e o
+    planejamento varrem a tabela inteira a cada consulta."""
+    controle, trino = _controle()
+    controle.ensure_tables()
+    indices = [sql for sql in trino.executados if sql.startswith("CALL")]
+    assert indices == [
+        'CALL "dw".system.execute(query => '
+        f"'CREATE INDEX IF NOT EXISTS {tabela}_busca_idx "
+        f'ON "control".{tabela} {colunas}\')'
+        for tabela, colunas in (
+            ("siconfi_work_units", "(endpoint, work_key, planned_at DESC)"),
+            (
+                "siconfi_work_events",
+                "(endpoint, work_key, revision_marker, event_at DESC)",
+            ),
+            ("siconfi_plan_keys", "(source, scope_hash)"),
+            ("siconfi_reference_refresh", "(endpoint, refreshed_at DESC)"),
+        )
+    ]
 
 
 def test_leitura_da_fila_e_sql_nativo_pelo_system_query() -> None:

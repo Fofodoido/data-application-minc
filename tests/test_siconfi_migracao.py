@@ -26,6 +26,7 @@ import siconfi_migracao
 import siconfi_storage
 from cliente_siconfi import SiconfiPage, request_hash
 from siconfi_migracao import (
+    avaliar_fila,
     avaliar_tabela,
     conexao_origem,
     converter_fila,
@@ -361,3 +362,25 @@ def test_fila_e_convertida_em_lotes_e_continua_de_onde_parou() -> None:
     segunda = converter_fila(ler, controle, progresso, lote=2)
     assert segunda["convertidas_neste_run"] == 0
     assert len(controle.unidades) == 3
+
+
+_ANTIGA = {"success": 3, "pending": 5, "running": 2}
+
+
+@pytest.mark.parametrize(
+    ("convertidas", "nova", "situacao"),
+    [
+        (10, {"success": 3, "pending": 7}, "completo"),
+        # A ingestão nova baixou e planejou depois: estados mudam, nada falta.
+        (10, {"success": 6, "pending": 9, "no_data": 1}, "completo"),
+        (4, {"success": 3, "pending": 1}, "em_andamento"),
+        # Conversão dada como terminada, mas o controle perdeu unidades.
+        (10, {"success": 3, "pending": 5}, "inconsistente"),
+    ],
+)
+def test_situacao_da_fila_convertida(
+    convertidas: int, nova: dict[str, int], situacao: str
+) -> None:
+    resultado = avaliar_fila(_ANTIGA, convertidas, nova)
+    assert resultado["situacao"] == situacao
+    assert resultado["antiga"] == {"success": 3, "pending": 7}

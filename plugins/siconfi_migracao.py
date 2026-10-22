@@ -336,6 +336,10 @@ def converter_fila(
             unidades.append(unidade)
             if evento:
                 eventos[linha["endpoint"]].append(evento)
+        # As unidades e os eventos entram antes do progresso. Se a task cair entre
+        # os dois, o lote é convertido de novo e as linhas dele ficam em dobro
+        # no controle. É inofensivo: a unidade vigente sai por ``DISTINCT ON``
+        # e o último evento de cada revisão é o mesmo nas duas cópias.
         controle.insert_units(unidades)
         for ep, evs in eventos.items():
             controle.record_events(ep, evs, RUN_ID_FILA)
@@ -347,6 +351,37 @@ def converter_fila(
         "convertidas_neste_run": neste_run,
         "total_convertidas": convertidas,
         "terminou": terminou,
+    }
+
+
+def avaliar_fila(
+    contagem_antiga: Mapping[str, int],
+    convertidas: int,
+    contagem_nova: Mapping[str, int],
+) -> dict[str, Any]:
+    """Situação da fila convertida: ``completo``, ``em_andamento`` ou ``inconsistente``.
+
+    Os estados não são comparados um a um para decidir: depois da conversão, a
+    ingestão nova muda o estado das unidades (pendente vira ``success``) e
+    planeja unidades novas. O que não pode acontecer é perder unidade: com a
+    conversão terminada, o controle novo tem de ter pelo menos todas as
+    unidades da fila antiga.
+    """
+    na_origem = sum(contagem_antiga.values())
+    no_controle = sum(contagem_nova.values())
+    if convertidas < na_origem:
+        situacao = "em_andamento"
+    elif convertidas == na_origem and no_controle >= na_origem:
+        situacao = "completo"
+    else:
+        situacao = "inconsistente"
+    return {
+        "antiga": status_da_fila_antiga(contagem_antiga),
+        "nova": dict(contagem_nova),
+        "unidades_na_origem": na_origem,
+        "convertidas": convertidas,
+        "unidades_no_controle": no_controle,
+        "situacao": situacao,
     }
 
 
