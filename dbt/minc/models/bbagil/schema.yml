@@ -200,7 +200,7 @@ models:
       - name: codigo_programa
         description: >
           Tipagem: 100% dos 508146 valores casam com inteiro.
-        data_type: integer
+        data_type: bigint
       - name: nome_programa
         description: >
           Tipagem: valores heterogeneos.
@@ -250,7 +250,7 @@ models:
       - name: referencenumber
         description: >
           Tipagem: 100% dos 508146 valores casam com inteiro.
-        data_type: integer
+        data_type: bigint
       - name: value
         description: >
           Tipagem: 100% dos 508146 valores casam com decimal.
