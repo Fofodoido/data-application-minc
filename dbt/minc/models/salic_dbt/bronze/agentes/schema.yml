@@ -215,9 +215,7 @@ models:
         tests:
           - not_null   # inferido do perfil do banco
       - name: _fatia
-        description: >
-          Coluna técnica da ingestão: identifica a fatia de extração que trouxe a linha. Não
-          é campo de negócio.
+        description: <p>fatia</p>
         data_type: integer
 
   - name: agentes__vuf
