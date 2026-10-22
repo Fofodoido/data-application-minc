@@ -2440,10 +2440,10 @@
       "linhas_sql": 12
     },
     {
-      "nome": "silver_mapas_agent",
+      "nome": "silver_agent",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_agent.sql",
+      "caminho": "dbt/minc/models/mapas/silver_agent.sql",
       "descricao": "Silver do Mapas Culturais — agentes (pessoa física ou coletivo). Uma linha por agente. Tipa a `mapas.bronze_agent` (17 colunas na origem; `location` vira `longitude` e `latitude`, 18 na saída), tira duplicata pelo `id` e deixa NULL o que está ausente ou não casa com o tipo. Não cruza tabelas.\nContém dado pessoal: nome, descrições livres e localização. Tabela materializada como `mapas.silver_agent`.\nOs códigos de `type` e `status` aparecem na origem como inteiros; os significados que o Mapas lhes dá NÃO foram verificados aqui.",
       "colunas": [
         {
@@ -2452,7 +2452,7 @@
         },
         {
           "nome": "user_id",
-          "descricao": "Usuário dono do agente (`silver_mapas_usr.id`)."
+          "descricao": "Usuário dono do agente (`silver_usr.id`)."
         },
         {
           "nome": "type",
@@ -2526,13 +2526,13 @@
       "sources": [
         "mapas.bronze_agent"
       ],
-      "linhas_sql": 74
+      "linhas_sql": 72
     },
     {
-      "nome": "silver_mapas_agent_meta",
+      "nome": "silver_agent_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_agent_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_agent_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos dos agentes em chave-valor. Uma linha por registro de atributo; um agente tem várias linhas, uma por `key`. Tipa a `mapas.bronze_agent_meta` e tira duplicata pelo `id`. NÃO é pivotada: um atributo por coluna é cruzamento e fica para a camada seguinte.\nContém dado pessoal: documento, telefone e autodeclaração são atributos desta tabela. Materializada como `mapas.silver_agent_meta`.",
       "colunas": [
         {
@@ -2541,7 +2541,7 @@
         },
         {
           "nome": "object_id",
-          "descricao": "Agente a que o atributo pertence (`silver_mapas_agent.id`)."
+          "descricao": "Agente a que o atributo pertence (`silver_agent.id`)."
         },
         {
           "nome": "key",
@@ -2549,7 +2549,7 @@
         },
         {
           "nome": "value",
-          "descricao": "Valor do atributo, sempre texto, porque o tipo depende da `key`. Espaços das pontas saem, e vazio vira NULL. Pode ser dado pessoal."
+          "descricao": "Valor do atributo, sempre texto, porque o tipo depende da `key`. Espaços das pontas saem, e vazio vira NULL. Pode ser dado pessoal.\nValor acima de 100 KB também vira NULL: são 29 linhas de `rcv_links_coletivo` e `rcv_sede_realizaAtividades_outros_lista` com a mesma string reescapada a cada gravação no Mapas, só barras invertidas, de 131 KB a 155 MB. O maior valor legítimo tem 65 KB."
         }
       ],
       "colunas_descritas": 4,
@@ -2559,13 +2559,13 @@
       "sources": [
         "mapas.bronze_agent_meta"
       ],
-      "linhas_sql": 39
+      "linhas_sql": 46
     },
     {
-      "nome": "silver_mapas_agent_relation",
+      "nome": "silver_agent_relation",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_agent_relation.sql",
+      "caminho": "dbt/minc/models/mapas/silver_agent_relation.sql",
       "descricao": "Silver do Mapas Culturais — relação de um agente com outro objeto do Mapas (inscrição, espaço, projeto etc.). Uma linha por relação. Tipa a `mapas.bronze_agent_relation` e tira duplicata pelo `id`.\n`object_id` só faz sentido junto de `object_type`: é o id na tabela daquele tipo. Esta camada não resolve a ligação. Materializada como `mapas.silver_agent_relation`.",
       "colunas": [
         {
@@ -2574,7 +2574,7 @@
         },
         {
           "nome": "agent_id",
-          "descricao": "Agente da relação (`silver_mapas_agent.id`)."
+          "descricao": "Agente da relação (`silver_agent.id`)."
         },
         {
           "nome": "object_type",
@@ -2612,13 +2612,13 @@
       "sources": [
         "mapas.bronze_agent_relation"
       ],
-      "linhas_sql": 52
+      "linhas_sql": 50
     },
     {
-      "nome": "silver_mapas_chat_message",
+      "nome": "silver_chat_message",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_chat_message.sql",
+      "caminho": "dbt/minc/models/mapas/silver_chat_message.sql",
       "descricao": "Silver do Mapas Culturais — mensagens do chat da plataforma (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_chat_message` (6 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_chat_message`.",
       "colunas": [
         {
@@ -2653,13 +2653,13 @@
       "sources": [
         "mapas.bronze_chat_message"
       ],
-      "linhas_sql": 34
+      "linhas_sql": 32
     },
     {
-      "nome": "silver_mapas_chat_thread",
+      "nome": "silver_chat_thread",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_chat_thread.sql",
+      "caminho": "dbt/minc/models/mapas/silver_chat_thread.sql",
       "descricao": "Silver do Mapas Culturais — conversas do chat (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_chat_thread` (9 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_chat_thread`.",
       "colunas": [
         {
@@ -2706,13 +2706,13 @@
       "sources": [
         "mapas.bronze_chat_thread"
       ],
-      "linhas_sql": 46
+      "linhas_sql": 44
     },
     {
-      "nome": "silver_mapas_cultbr_request_log",
+      "nome": "silver_cultbr_request_log",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_cultbr_request_log.sql",
+      "caminho": "dbt/minc/models/mapas/silver_cultbr_request_log.sql",
       "descricao": "Silver do Mapas Culturais — registro das chamadas à integração CultBR (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_cultbr_request_log` (8 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_cultbr_request_log`.",
       "colunas": [
         {
@@ -2755,13 +2755,13 @@
       "sources": [
         "mapas.bronze_cultbr_request_log"
       ],
-      "linhas_sql": 44
+      "linhas_sql": 42
     },
     {
-      "nome": "silver_mapas_cultbr_request_log_attempt",
+      "nome": "silver_cultbr_request_log_attempt",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_cultbr_request_log_attempt.sql",
+      "caminho": "dbt/minc/models/mapas/silver_cultbr_request_log_attempt.sql",
       "descricao": "Silver do Mapas Culturais — tentativas de cada chamada à integração CultBR (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_cultbr_request_log_attempt` (14 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_cultbr_request_log_attempt`.",
       "colunas": [
         {
@@ -2828,13 +2828,13 @@
       "sources": [
         "mapas.bronze_cultbr_request_log_attempt"
       ],
-      "linhas_sql": 58
+      "linhas_sql": 56
     },
     {
-      "nome": "silver_mapas_db_update",
+      "nome": "silver_db_update",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_db_update.sql",
+      "caminho": "dbt/minc/models/mapas/silver_db_update.sql",
       "descricao": "Silver do Mapas Culturais — controle das atualizações de banco já aplicadas (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_db_update` (2 colunas na origem), tira duplicata pela chave (name). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_db_update`.",
       "colunas": [
         {
@@ -2853,13 +2853,13 @@
       "sources": [
         "mapas.bronze_db_update"
       ],
-      "linhas_sql": 30
+      "linhas_sql": 28
     },
     {
-      "nome": "silver_mapas_evaluation_method_configuration",
+      "nome": "silver_evaluation_method_configuration",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_evaluation_method_configuration.sql",
+      "caminho": "dbt/minc/models/mapas/silver_evaluation_method_configuration.sql",
       "descricao": "Silver do Mapas Culturais — configuração do método de avaliação de uma oportunidade (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_evaluation_method_configuration` (6 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_evaluation_method_configuration`.",
       "colunas": [
         {
@@ -2894,13 +2894,13 @@
       "sources": [
         "mapas.bronze_evaluation_method_configuration"
       ],
-      "linhas_sql": 36
+      "linhas_sql": 34
     },
     {
-      "nome": "silver_mapas_evaluationmethodconfiguration_meta",
+      "nome": "silver_evaluationmethodconfiguration_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_evaluationmethodconfiguration_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_evaluationmethodconfiguration_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos da configuração do método de avaliação, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_evaluationmethodconfiguration_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_evaluationmethodconfiguration_meta`.",
       "colunas": [
         {
@@ -2927,13 +2927,13 @@
       "sources": [
         "mapas.bronze_evaluationmethodconfiguration_meta"
       ],
-      "linhas_sql": 34
+      "linhas_sql": 32
     },
     {
-      "nome": "silver_mapas_event",
+      "nome": "silver_event",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_event.sql",
+      "caminho": "dbt/minc/models/mapas/silver_event.sql",
       "descricao": "Silver do Mapas Culturais — eventos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_event` (13 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_event`.",
       "colunas": [
         {
@@ -2996,13 +2996,13 @@
       "sources": [
         "mapas.bronze_event"
       ],
-      "linhas_sql": 54
+      "linhas_sql": 52
     },
     {
-      "nome": "silver_mapas_event_attendance",
+      "nome": "silver_event_attendance",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_event_attendance.sql",
+      "caminho": "dbt/minc/models/mapas/silver_event_attendance.sql",
       "descricao": "Silver do Mapas Culturais — presenças confirmadas em ocorrências de eventos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_event_attendance` (10 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_event_attendance`.",
       "colunas": [
         {
@@ -3053,13 +3053,13 @@
       "sources": [
         "mapas.bronze_event_attendance"
       ],
-      "linhas_sql": 48
+      "linhas_sql": 46
     },
     {
-      "nome": "silver_mapas_event_meta",
+      "nome": "silver_event_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_event_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_event_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos dos eventos, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_event_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_event_meta`.",
       "colunas": [
         {
@@ -3086,13 +3086,13 @@
       "sources": [
         "mapas.bronze_event_meta"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_event_occurrence",
+      "nome": "silver_event_occurrence",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_event_occurrence.sql",
+      "caminho": "dbt/minc/models/mapas/silver_event_occurrence.sql",
       "descricao": "Silver do Mapas Culturais — ocorrências (data, hora e local) dos eventos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_event_occurrence` (17 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_event_occurrence`.",
       "colunas": [
         {
@@ -3171,13 +3171,13 @@
       "sources": [
         "mapas.bronze_event_occurrence"
       ],
-      "linhas_sql": 62
+      "linhas_sql": 60
     },
     {
-      "nome": "silver_mapas_event_occurrence_cancellation",
+      "nome": "silver_event_occurrence_cancellation",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_event_occurrence_cancellation.sql",
+      "caminho": "dbt/minc/models/mapas/silver_event_occurrence_cancellation.sql",
       "descricao": "Silver do Mapas Culturais — cancelamentos de ocorrências de eventos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_event_occurrence_cancellation` (3 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_event_occurrence_cancellation`.",
       "colunas": [
         {
@@ -3200,13 +3200,13 @@
       "sources": [
         "mapas.bronze_event_occurrence_cancellation"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_event_occurrence_recurrence",
+      "nome": "silver_event_occurrence_recurrence",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_event_occurrence_recurrence.sql",
+      "caminho": "dbt/minc/models/mapas/silver_event_occurrence_recurrence.sql",
       "descricao": "Silver do Mapas Culturais — regras de recorrência das ocorrências de eventos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_event_occurrence_recurrence` (5 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_event_occurrence_recurrence`.",
       "colunas": [
         {
@@ -3237,13 +3237,13 @@
       "sources": [
         "mapas.bronze_event_occurrence_recurrence"
       ],
-      "linhas_sql": 35
+      "linhas_sql": 33
     },
     {
-      "nome": "silver_mapas_federative_entity",
+      "nome": "silver_federative_entity",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_federative_entity.sql",
+      "caminho": "dbt/minc/models/mapas/silver_federative_entity.sql",
       "descricao": "Silver do Mapas Culturais — entes federativos (estados e municípios) (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_federative_entity` (7 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_federative_entity`.",
       "colunas": [
         {
@@ -3282,13 +3282,13 @@
       "sources": [
         "mapas.bronze_federative_entity"
       ],
-      "linhas_sql": 35
+      "linhas_sql": 33
     },
     {
-      "nome": "silver_mapas_file",
+      "nome": "silver_file",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_file.sql",
+      "caminho": "dbt/minc/models/mapas/silver_file.sql",
       "descricao": "Silver do Mapas Culturais — metadados dos arquivos anexados aos objetos do Mapas (não o conteúdo do arquivo) (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_file` (12 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_file`.",
       "colunas": [
         {
@@ -3347,13 +3347,13 @@
       "sources": [
         "mapas.bronze_file"
       ],
-      "linhas_sql": 53
+      "linhas_sql": 51
     },
     {
-      "nome": "silver_mapas_metadata",
+      "nome": "silver_metadata",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_metadata.sql",
+      "caminho": "dbt/minc/models/mapas/silver_metadata.sql",
       "descricao": "Silver do Mapas Culturais — metadados genéricos de objetos, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_metadata` (4 colunas na origem), tira duplicata pela chave (object_id, object_type, key). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_metadata`.",
       "colunas": [
         {
@@ -3380,13 +3380,13 @@
       "sources": [
         "mapas.bronze_metadata"
       ],
-      "linhas_sql": 36
+      "linhas_sql": 34
     },
     {
-      "nome": "silver_mapas_metalist",
+      "nome": "silver_metalist",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_metalist.sql",
+      "caminho": "dbt/minc/models/mapas/silver_metalist.sql",
       "descricao": "Silver do Mapas Culturais — listas de links e vídeos associados aos objetos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_metalist` (9 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_metalist`.",
       "colunas": [
         {
@@ -3433,13 +3433,13 @@
       "sources": [
         "mapas.bronze_metalist"
       ],
-      "linhas_sql": 38
+      "linhas_sql": 36
     },
     {
-      "nome": "silver_mapas_notification",
+      "nome": "silver_notification",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_notification.sql",
+      "caminho": "dbt/minc/models/mapas/silver_notification.sql",
       "descricao": "Silver do Mapas Culturais — notificações enviadas aos usuários (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_notification` (7 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_notification`.",
       "colunas": [
         {
@@ -3478,13 +3478,13 @@
       "sources": [
         "mapas.bronze_notification"
       ],
-      "linhas_sql": 35
+      "linhas_sql": 33
     },
     {
-      "nome": "silver_mapas_notification_meta",
+      "nome": "silver_notification_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_notification_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_notification_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos das notificações, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_notification_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_notification_meta`.",
       "colunas": [
         {
@@ -3511,13 +3511,13 @@
       "sources": [
         "mapas.bronze_notification_meta"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_opportunity",
+      "nome": "silver_opportunity",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_opportunity.sql",
+      "caminho": "dbt/minc/models/mapas/silver_opportunity.sql",
       "descricao": "Silver do Mapas Culturais — oportunidades (editais e chamadas) (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_opportunity` (24 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_opportunity`.",
       "colunas": [
         {
@@ -3624,13 +3624,13 @@
       "sources": [
         "mapas.bronze_opportunity"
       ],
-      "linhas_sql": 78
+      "linhas_sql": 76
     },
     {
-      "nome": "silver_mapas_opportunity_meta",
+      "nome": "silver_opportunity_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_opportunity_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_opportunity_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos das oportunidades, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_opportunity_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_opportunity_meta`.",
       "colunas": [
         {
@@ -3657,13 +3657,13 @@
       "sources": [
         "mapas.bronze_opportunity_meta"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_procuration",
+      "nome": "silver_procuration",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_procuration.sql",
+      "caminho": "dbt/minc/models/mapas/silver_procuration.sql",
       "descricao": "Silver do Mapas Culturais — procurações: um usuário autorizado a agir em nome de outro (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_procuration` (6 colunas na origem), tira duplicata (linha idêntica, sem chave primária utilizável). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. A coluna `token` (token da procuração (credencial)) NÃO vai para a silver. Materializada como `mapas.silver_procuration`.",
       "colunas": [
         {
@@ -3694,13 +3694,13 @@
       "sources": [
         "mapas.bronze_procuration"
       ],
-      "linhas_sql": 29
+      "linhas_sql": 27
     },
     {
-      "nome": "silver_mapas_project",
+      "nome": "silver_project",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_project.sql",
+      "caminho": "dbt/minc/models/mapas/silver_project.sql",
       "descricao": "Silver do Mapas Culturais — projetos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_project` (14 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_project`.",
       "colunas": [
         {
@@ -3767,13 +3767,13 @@
       "sources": [
         "mapas.bronze_project"
       ],
-      "linhas_sql": 56
+      "linhas_sql": 54
     },
     {
-      "nome": "silver_mapas_project_event",
+      "nome": "silver_project_event",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_project_event.sql",
+      "caminho": "dbt/minc/models/mapas/silver_project_event.sql",
       "descricao": "Silver do Mapas Culturais — relação entre projetos e eventos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_project_event` (5 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_project_event`.",
       "colunas": [
         {
@@ -3804,13 +3804,13 @@
       "sources": [
         "mapas.bronze_project_event"
       ],
-      "linhas_sql": 33
+      "linhas_sql": 31
     },
     {
-      "nome": "silver_mapas_project_meta",
+      "nome": "silver_project_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_project_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_project_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos dos projetos, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_project_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_project_meta`.",
       "colunas": [
         {
@@ -3837,13 +3837,13 @@
       "sources": [
         "mapas.bronze_project_meta"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_registration",
+      "nome": "silver_registration",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration.sql",
       "descricao": "Silver do Mapas Culturais — inscrições nas oportunidades (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration` (22 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration`.",
       "colunas": [
         {
@@ -3942,13 +3942,13 @@
       "sources": [
         "mapas.bronze_registration"
       ],
-      "linhas_sql": 72
+      "linhas_sql": 70
     },
     {
-      "nome": "silver_mapas_registration_evaluation",
+      "nome": "silver_registration_evaluation",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_evaluation.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_evaluation.sql",
       "descricao": "Silver do Mapas Culturais — avaliações das inscrições (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_evaluation` (11 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_evaluation`.",
       "colunas": [
         {
@@ -4003,13 +4003,13 @@
       "sources": [
         "mapas.bronze_registration_evaluation"
       ],
-      "linhas_sql": 50
+      "linhas_sql": 48
     },
     {
-      "nome": "silver_mapas_registration_field_configuration",
+      "nome": "silver_registration_field_configuration",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_field_configuration.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_field_configuration.sql",
       "descricao": "Silver do Mapas Culturais — configuração dos campos do formulário de inscrição (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_field_configuration` (17 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_field_configuration`.",
       "colunas": [
         {
@@ -4088,13 +4088,13 @@
       "sources": [
         "mapas.bronze_registration_field_configuration"
       ],
-      "linhas_sql": 64
+      "linhas_sql": 62
     },
     {
-      "nome": "silver_mapas_registration_file_configuration",
+      "nome": "silver_registration_file_configuration",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_file_configuration.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_file_configuration.sql",
       "descricao": "Silver do Mapas Culturais — configuração dos anexos exigidos na inscrição (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_file_configuration` (14 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_file_configuration`.",
       "colunas": [
         {
@@ -4161,13 +4161,13 @@
       "sources": [
         "mapas.bronze_registration_file_configuration"
       ],
-      "linhas_sql": 58
+      "linhas_sql": 56
     },
     {
-      "nome": "silver_mapas_registration_meta",
+      "nome": "silver_registration_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos das inscrições, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_meta`.",
       "colunas": [
         {
@@ -4194,13 +4194,13 @@
       "sources": [
         "mapas.bronze_registration_meta"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_registration_step",
+      "nome": "silver_registration_step",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_step.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_step.sql",
       "descricao": "Silver do Mapas Culturais — etapas das oportunidades (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_step` (7 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_step`.",
       "colunas": [
         {
@@ -4239,13 +4239,13 @@
       "sources": [
         "mapas.bronze_registration_step"
       ],
-      "linhas_sql": 36
+      "linhas_sql": 34
     },
     {
-      "nome": "silver_mapas_registration_workplan",
+      "nome": "silver_registration_workplan",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_workplan.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_workplan.sql",
       "descricao": "Silver do Mapas Culturais — planos de trabalho das inscrições (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_workplan` (5 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_workplan`.",
       "colunas": [
         {
@@ -4276,13 +4276,13 @@
       "sources": [
         "mapas.bronze_registration_workplan"
       ],
-      "linhas_sql": 33
+      "linhas_sql": 31
     },
     {
-      "nome": "silver_mapas_registration_workplan_goal",
+      "nome": "silver_registration_workplan_goal",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_workplan_goal.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_workplan_goal.sql",
       "descricao": "Silver do Mapas Culturais — metas dos planos de trabalho (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_workplan_goal` (6 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_workplan_goal`.",
       "colunas": [
         {
@@ -4317,13 +4317,13 @@
       "sources": [
         "mapas.bronze_registration_workplan_goal"
       ],
-      "linhas_sql": 35
+      "linhas_sql": 33
     },
     {
-      "nome": "silver_mapas_registration_workplan_goal_delivery",
+      "nome": "silver_registration_workplan_goal_delivery",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_workplan_goal_delivery.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_workplan_goal_delivery.sql",
       "descricao": "Silver do Mapas Culturais — entregas das metas dos planos de trabalho (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_workplan_goal_delivery` (6 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_workplan_goal_delivery`.",
       "colunas": [
         {
@@ -4358,13 +4358,13 @@
       "sources": [
         "mapas.bronze_registration_workplan_goal_delivery"
       ],
-      "linhas_sql": 36
+      "linhas_sql": 34
     },
     {
-      "nome": "silver_mapas_registration_workplan_goal_delivery_meta",
+      "nome": "silver_registration_workplan_goal_delivery_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_workplan_goal_delivery_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_workplan_goal_delivery_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos das entregas das metas, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_workplan_goal_delivery_meta` (4 colunas na origem), tira duplicata (linha idêntica, sem chave primária utilizável). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_workplan_goal_delivery_meta`.",
       "colunas": [
         {
@@ -4391,13 +4391,13 @@
       "sources": [
         "mapas.bronze_registration_workplan_goal_delivery_meta"
       ],
-      "linhas_sql": 26
+      "linhas_sql": 24
     },
     {
-      "nome": "silver_mapas_registration_workplan_goal_meta",
+      "nome": "silver_registration_workplan_goal_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_workplan_goal_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_workplan_goal_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos das metas, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_workplan_goal_meta` (4 colunas na origem), tira duplicata (linha idêntica, sem chave primária utilizável). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_workplan_goal_meta`.",
       "colunas": [
         {
@@ -4424,13 +4424,13 @@
       "sources": [
         "mapas.bronze_registration_workplan_goal_meta"
       ],
-      "linhas_sql": 25
+      "linhas_sql": 23
     },
     {
-      "nome": "silver_mapas_registration_workplan_meta",
+      "nome": "silver_registration_workplan_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_registration_workplan_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_registration_workplan_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos dos planos de trabalho, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_registration_workplan_meta` (4 colunas na origem), tira duplicata (linha idêntica, sem chave primária utilizável). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_registration_workplan_meta`.",
       "colunas": [
         {
@@ -4457,13 +4457,13 @@
       "sources": [
         "mapas.bronze_registration_workplan_meta"
       ],
-      "linhas_sql": 26
+      "linhas_sql": 24
     },
     {
-      "nome": "silver_mapas_request",
+      "nome": "silver_request",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_request.sql",
+      "caminho": "dbt/minc/models/mapas/silver_request.sql",
       "descricao": "Silver do Mapas Culturais — solicitações de aprovação entre objetos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_request` (12 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_request`.",
       "colunas": [
         {
@@ -4522,13 +4522,13 @@
       "sources": [
         "mapas.bronze_request"
       ],
-      "linhas_sql": 52
+      "linhas_sql": 50
     },
     {
-      "nome": "silver_mapas_role",
+      "nome": "silver_role",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_role.sql",
+      "caminho": "dbt/minc/models/mapas/silver_role.sql",
       "descricao": "Silver do Mapas Culturais — papéis atribuídos a usuários em subsites (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_role` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_role`.",
       "colunas": [
         {
@@ -4555,13 +4555,13 @@
       "sources": [
         "mapas.bronze_role"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_seal",
+      "nome": "silver_seal",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_seal.sql",
+      "caminho": "dbt/minc/models/mapas/silver_seal.sql",
       "descricao": "Silver do Mapas Culturais — selos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_seal` (12 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_seal`.",
       "colunas": [
         {
@@ -4620,13 +4620,13 @@
       "sources": [
         "mapas.bronze_seal"
       ],
-      "linhas_sql": 52
+      "linhas_sql": 50
     },
     {
-      "nome": "silver_mapas_seal_meta",
+      "nome": "silver_seal_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_seal_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_seal_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos dos selos, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_seal_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_seal_meta`.",
       "colunas": [
         {
@@ -4653,13 +4653,13 @@
       "sources": [
         "mapas.bronze_seal_meta"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_seal_relation",
+      "nome": "silver_seal_relation",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_seal_relation.sql",
+      "caminho": "dbt/minc/models/mapas/silver_seal_relation.sql",
       "descricao": "Silver do Mapas Culturais — selos concedidos a objetos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_seal_relation` (10 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_seal_relation`.",
       "colunas": [
         {
@@ -4710,13 +4710,13 @@
       "sources": [
         "mapas.bronze_seal_relation"
       ],
-      "linhas_sql": 48
+      "linhas_sql": 46
     },
     {
-      "nome": "silver_mapas_security_allowlist",
+      "nome": "silver_security_allowlist",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_security_allowlist.sql",
+      "caminho": "dbt/minc/models/mapas/silver_security_allowlist.sql",
       "descricao": "Silver do Mapas Culturais — endereços IP permitidos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_security_allowlist` (9 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_security_allowlist`.",
       "colunas": [
         {
@@ -4763,13 +4763,13 @@
       "sources": [
         "mapas.bronze_security_allowlist"
       ],
-      "linhas_sql": 37
+      "linhas_sql": 35
     },
     {
-      "nome": "silver_mapas_security_blacklist",
+      "nome": "silver_security_blacklist",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_security_blacklist.sql",
+      "caminho": "dbt/minc/models/mapas/silver_security_blacklist.sql",
       "descricao": "Silver do Mapas Culturais — endereços IP bloqueados (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_security_blacklist` (13 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_security_blacklist`.",
       "colunas": [
         {
@@ -4832,13 +4832,13 @@
       "sources": [
         "mapas.bronze_security_blacklist"
       ],
-      "linhas_sql": 54
+      "linhas_sql": 52
     },
     {
-      "nome": "silver_mapas_security_meta",
+      "nome": "silver_security_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_security_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_security_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos da configuração de segurança, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_security_meta` (3 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_security_meta`.",
       "colunas": [
         {
@@ -4861,13 +4861,13 @@
       "sources": [
         "mapas.bronze_security_meta"
       ],
-      "linhas_sql": 31
+      "linhas_sql": 29
     },
     {
-      "nome": "silver_mapas_space",
+      "nome": "silver_space",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_space.sql",
+      "caminho": "dbt/minc/models/mapas/silver_space.sql",
       "descricao": "Silver do Mapas Culturais — espaços culturais (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_space` (16 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_space`.",
       "colunas": [
         {
@@ -4946,13 +4946,13 @@
       "sources": [
         "mapas.bronze_space"
       ],
-      "linhas_sql": 68
+      "linhas_sql": 66
     },
     {
-      "nome": "silver_mapas_space_meta",
+      "nome": "silver_space_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_space_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_space_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos dos espaços, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_space_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_space_meta`.",
       "colunas": [
         {
@@ -4979,13 +4979,13 @@
       "sources": [
         "mapas.bronze_space_meta"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_space_relation",
+      "nome": "silver_space_relation",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_space_relation.sql",
+      "caminho": "dbt/minc/models/mapas/silver_space_relation.sql",
       "descricao": "Silver do Mapas Culturais — relações dos espaços com agentes (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_space_relation` (6 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_space_relation`.",
       "colunas": [
         {
@@ -5020,13 +5020,13 @@
       "sources": [
         "mapas.bronze_space_relation"
       ],
-      "linhas_sql": 34
+      "linhas_sql": 32
     },
     {
-      "nome": "silver_mapas_subsite",
+      "nome": "silver_subsite",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_subsite.sql",
+      "caminho": "dbt/minc/models/mapas/silver_subsite.sql",
       "descricao": "Silver do Mapas Culturais — subsites (instâncias) da plataforma (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_subsite` (9 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_subsite`.",
       "colunas": [
         {
@@ -5073,13 +5073,13 @@
       "sources": [
         "mapas.bronze_subsite"
       ],
-      "linhas_sql": 46
+      "linhas_sql": 44
     },
     {
-      "nome": "silver_mapas_subsite_meta",
+      "nome": "silver_subsite_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_subsite_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_subsite_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos dos subsites, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_subsite_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_subsite_meta`.",
       "colunas": [
         {
@@ -5106,13 +5106,13 @@
       "sources": [
         "mapas.bronze_subsite_meta"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_system_role",
+      "nome": "silver_system_role",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_system_role.sql",
+      "caminho": "dbt/minc/models/mapas/silver_system_role.sql",
       "descricao": "Silver do Mapas Culturais — papéis do sistema e suas permissões (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_system_role` (8 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_system_role`.",
       "colunas": [
         {
@@ -5155,13 +5155,13 @@
       "sources": [
         "mapas.bronze_system_role"
       ],
-      "linhas_sql": 44
+      "linhas_sql": 42
     },
     {
-      "nome": "silver_mapas_term",
+      "nome": "silver_term",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_term.sql",
+      "caminho": "dbt/minc/models/mapas/silver_term.sql",
       "descricao": "Silver do Mapas Culturais — termos de taxonomia (áreas, linguagens, tags) (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_term` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_term`.",
       "colunas": [
         {
@@ -5188,13 +5188,13 @@
       "sources": [
         "mapas.bronze_term"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_term_relation",
+      "nome": "silver_term_relation",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_term_relation.sql",
+      "caminho": "dbt/minc/models/mapas/silver_term_relation.sql",
       "descricao": "Silver do Mapas Culturais — termos associados a objetos (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_term_relation` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_term_relation`.",
       "colunas": [
         {
@@ -5221,13 +5221,13 @@
       "sources": [
         "mapas.bronze_term_relation"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_user_app",
+      "nome": "silver_user_app",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_user_app.sql",
+      "caminho": "dbt/minc/models/mapas/silver_user_app.sql",
       "descricao": "Silver do Mapas Culturais — aplicações (chaves de API) cadastradas, sem a chave privada (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_user_app` (7 colunas na origem), tira duplicata pela chave (public_key). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. A coluna `private_key` (chave privada da aplicação (credencial)) NÃO vai para a silver. Materializada como `mapas.silver_user_app`.",
       "colunas": [
         {
@@ -5262,13 +5262,13 @@
       "sources": [
         "mapas.bronze_user_app"
       ],
-      "linhas_sql": 38
+      "linhas_sql": 36
     },
     {
-      "nome": "silver_mapas_user_meta",
+      "nome": "silver_user_meta",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_user_meta.sql",
+      "caminho": "dbt/minc/models/mapas/silver_user_meta.sql",
       "descricao": "Silver do Mapas Culturais — atributos dos usuários, em chave-valor (descrição inferida do nome da tabela; o significado de negócio das colunas NÃO foi verificado). Tipa a `mapas.bronze_user_meta` (4 colunas na origem), tira duplicata pela chave (id). Não cruza tabelas. Colunas e estatísticas vêm de uma amostra de até 100 linhas. Materializada como `mapas.silver_user_meta`.",
       "colunas": [
         {
@@ -5295,13 +5295,13 @@
       "sources": [
         "mapas.bronze_user_meta"
       ],
-      "linhas_sql": 32
+      "linhas_sql": 30
     },
     {
-      "nome": "silver_mapas_usr",
+      "nome": "silver_usr",
       "dominio": "mapas",
       "camada": "silver",
-      "caminho": "dbt/minc/models/mapas_dbt/silver/silver_mapas_usr.sql",
+      "caminho": "dbt/minc/models/mapas/silver_usr.sql",
       "descricao": "Silver do Mapas Culturais — usuários da plataforma. Uma linha por usuário. Tipa a `mapas.bronze_usr` e tira duplicata pelo `id`.\n`auth_uid` e `email` ficam DE FORA de propósito: são identificadores pessoais sem uso analítico, e a silver é lida por mais gente do que a bronze. Materializada como `mapas.silver_usr`.",
       "colunas": [
         {
@@ -5336,7 +5336,7 @@
       "sources": [
         "mapas.bronze_usr"
       ],
-      "linhas_sql": 42
+      "linhas_sql": 40
     },
     {
       "nome": "models_metadata",

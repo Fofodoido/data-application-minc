@@ -19,6 +19,12 @@ publica um evento com a key exata do arquivo no ``extra``, e quem consome lê
 essa key do evento que o disparou. O ``extra`` carrega a *cadeia* inteira
 (``entidade -> key``) desde o programa, para que um consumidor que precise de
 várias entidades -- anexos, relatórios e planos -- leia todas do mesmo run.
+
+Fonte que grava muitos arquivos por run (SICONFI: um por página da API) usa
+``prefixo_do_run``/``caminho_no_run`` e publica no ``extra`` a **pasta** do run,
+não a key de um arquivo: quem consome lista a pasta. E cada pasta só tem o que
+aquele run processou, então o consumidor precisa ler todos os eventos recebidos
+(``eventos_em_ordem``), não só o mais novo.
 """
 
 from __future__ import annotations

@@ -1,34 +1,42 @@
-"""Conversão das páginas antigas do Postgres para o raw e o staging do datalakehouse.
+"""Conversão do SICONFI antigo: páginas para o raw e fila para o controle novo.
 
 O que estes testes garantem:
 
-- uma página antiga convertida cai na mesma key e gera o mesmo staging que a
-  DAG nova gravaria para a mesma página -- a ponte e a bronze não distinguem
-  as duas origens, só o campo ``_migrado_de`` do raw diz de onde veio;
+- uma página antiga convertida cai na mesma key e tem o mesmo raw que a DAG nova
+  gravaria para a mesma página, mais o ``_migrado_de``;
 - a pasta é a do run (data do ``run_id``), não a da coleta: páginas de um run
   que passou da meia-noite continuam na mesma pasta;
 - a conversão continua de onde parou, só avança o progresso depois de gravar o
   lote inteiro e respeita o limite de páginas e o prazo;
-- a origem só é lida: nenhum comando de escrita no ``siconfi_bronze``.
+- a conferência compara a origem com os arquivos que existem no raw, e acusa
+  quando uma tabela dada como copiada não tem os arquivos;
+- a fila antiga vira unidades e eventos do controle novo sem perder o estado:
+  o que já foi baixado não volta a ser pendente;
+- a origem só é lida: nenhum comando de escrita no Postgres antigo.
 """
 
-import io
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-import pandas as pd
 import pytest
 
 import siconfi_migracao
 import siconfi_storage
 from cliente_siconfi import SiconfiPage, request_hash
 from siconfi_migracao import (
+    avaliar_tabela,
+    conexao_origem,
+    converter_fila,
     data_do_run,
     envelope_da_linha,
+    exigir_sem_duplicatas,
     migrar_endpoint,
+    objetos_dos_runs,
+    status_da_fila_antiga,
     tabela_antiga,
+    unidade_e_evento,
 )
 from siconfi_storage import persist_page
 
@@ -50,11 +58,18 @@ class _BucketFalso:
         self.objetos[key] = conteudo
         return key
 
+    def listar_objetos(self, prefixo: str) -> list[dict[str, Any]]:
+        return [{"Key": key} for key in self.objetos if key.startswith(prefixo)]
+
 
 @pytest.fixture
 def bucket() -> Any:
     falso = _BucketFalso()
-    with patch.object(siconfi_storage.datalakehouse, "gravar_bytes", falso.gravar_bytes):
+    lake = siconfi_storage.datalakehouse
+    with (
+        patch.object(lake, "gravar_bytes", falso.gravar_bytes),
+        patch.object(lake, "listar_objetos", falso.listar_objetos),
+    ):
         yield falso
 
 
@@ -99,16 +114,11 @@ def test_pagina_convertida_e_igual_a_que_a_dag_gravaria(bucket: _BucketFalso) ->
     convertida = dict(bucket.objetos)
 
     assert set(convertida) == set(da_dag)
-    key_raw = next(k for k in da_dag if k.startswith("raw/"))
-    key_staging = next(k for k in da_dag if k.startswith("staging/"))
-
-    raw_dag, raw_conv = json.loads(da_dag[key_raw]), json.loads(convertida[key_raw])
+    (key,) = da_dag
+    assert key.startswith("raw/")
+    raw_dag, raw_conv = json.loads(da_dag[key]), json.loads(convertida[key])
     assert raw_conv.pop("_migrado_de") == "siconfi_bronze.raw_pages_rreo#41"
     assert raw_conv == raw_dag
-    pd.testing.assert_frame_equal(
-        pd.read_parquet(io.BytesIO(convertida[key_staging])),
-        pd.read_parquet(io.BytesIO(da_dag[key_staging])),
-    )
 
 
 def test_fetched_at_sai_em_utc_qualquer_que_seja_o_fuso_do_banco() -> None:
@@ -132,10 +142,38 @@ def test_tabela_antiga_de_cada_endpoint(endpoint: str, tabela: str) -> None:
 
 
 def test_origem_so_e_lida() -> None:
-    comandos = " ".join(str(s) for s in siconfi_migracao._SQL_ORIGEM).upper()
-    assert "SELECT" in comandos
-    for escrita in ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE"):
-        assert escrita not in comandos
+    comandos = [str(s).upper() for s in siconfi_migracao._SQL_ORIGEM]
+    for comando in comandos:
+        assert "SELECT" in comando
+        for escrita in ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE"):
+            assert escrita not in comando
+
+
+def test_conexao_com_a_origem_e_so_de_leitura() -> None:
+    """O Postgres recusa qualquer escrita numa sessão ``readonly``: mesmo que um
+    SQL de escrita entrasse por engano, ele falharia na origem."""
+    conn = MagicMock()
+    with patch.object(siconfi_migracao.psycopg2, "connect", return_value=conn):
+        with conexao_origem("dbname=x"):
+            pass
+    conn.set_session.assert_called_once_with(readonly=True, autocommit=True)
+    conn.close.assert_called_once()
+
+
+class _ConexaoFalsa:
+    def __init__(self, resposta: int) -> None:
+        self.resposta = resposta
+
+    def cursor(self) -> Any:
+        cur = MagicMock()
+        cur.__enter__.return_value.fetchone.return_value = (self.resposta,)
+        return cur
+
+
+def test_tabela_com_chave_repetida_nao_e_convertida() -> None:
+    with pytest.raises(ValueError, match="raw_pages_rreo: 2 chaves"):
+        exigir_sem_duplicatas(_ConexaoFalsa(2), "rreo")
+    exigir_sem_duplicatas(_ConexaoFalsa(0), "rreo")
 
 
 # ── retomada, limite e prazo ─────────────────────────────────────────────
@@ -154,12 +192,19 @@ class _OrigemFalsa:
 class _ProgressoFalso:
     def __init__(self) -> None:
         self.estado: dict[str, tuple[int, int]] = {}
+        self.fila = ("", "", 0)
 
     def ler(self, tabela: str) -> tuple[int, int]:
         return self.estado.get(tabela, (0, 0))
 
     def salvar(self, tabela: str, ultimo: int, copiadas: int) -> None:
         self.estado[tabela] = (ultimo, copiadas)
+
+    def ler_fila(self) -> tuple[str, str, int]:
+        return self.fila
+
+    def salvar_fila(self, endpoint: str, work_key: str, convertidas: int) -> None:
+        self.fila = (endpoint, work_key, convertidas)
 
 
 def test_continua_de_onde_parou_e_respeita_o_limite(bucket: _BucketFalso) -> None:
@@ -173,7 +218,7 @@ def test_continua_de_onde_parou_e_respeita_o_limite(bucket: _BucketFalso) -> Non
     assert segunda["copiadas_neste_run"] == 2
     assert segunda["terminou"]
     assert progresso.ler("raw_pages_rreo") == (20, 5)
-    assert len([k for k in bucket.objetos if k.startswith("raw/")]) == 5
+    assert len(bucket.objetos) == 5
 
 
 def test_progresso_so_avanca_depois_do_lote_inteiro(bucket: _BucketFalso) -> None:
@@ -203,3 +248,116 @@ def test_prazo_esgotado_para_antes_do_proximo_lote(bucket: _BucketFalso) -> None
     )
     assert resumo["copiadas_neste_run"] == 0
     assert not resumo["terminou"]
+
+
+# ── conferência contra o raw ─────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("origem", "distintas", "copiadas", "objetos", "situacao"),
+    [
+        (10, 10, 10, 10, "completo"),
+        (10, 10, 4, 4, "em_andamento"),  # parou pelo limite ou pelo prazo
+        (10, 10, 10, 9, "inconsistente"),  # página perdida
+        (10, 9, 10, 9, "inconsistente"),  # chave repetida virou um objeto só
+        (0, 0, 0, 0, "completo"),  # tabela vazia
+    ],
+)
+def test_situacao_de_cada_tabela(
+    origem: int, distintas: int, copiadas: int, objetos: int, situacao: str
+) -> None:
+    assert avaliar_tabela(origem, distintas, copiadas, objetos)["situacao"] == situacao
+
+
+def test_objetos_contados_so_nas_pastas_dos_runs_antigos(bucket: _BucketFalso) -> None:
+    siconfi_migracao.gravar_linha(_linha(1, page_offset=0))
+    siconfi_migracao.gravar_linha(_linha(2, page_offset=5000))
+    # Um arquivo da DAG nova, em outro run, não entra na conta.
+    persist_page(_page(), "manual__2026-10-21T10:00:00+00:00", _DATA_DO_RUN)
+
+    assert objetos_dos_runs("rreo", [(_RUN, _COLETA_BRT, 2)]) == 2
+
+
+# ── fila ─────────────────────────────────────────────────────────────────
+
+
+def _fila(status: str, work_key: str = "k", endpoint: str = "rreo") -> dict[str, Any]:
+    return {
+        "endpoint": endpoint,
+        "work_key": work_key,
+        "params": {"id_ente": 1, "an_exercicio": 2025},
+        "revision_marker": "rev",
+        "status": status,
+        "last_error": "erro" if status != "success" else None,
+        "last_success_at": datetime(2026, 9, 30, tzinfo=timezone.utc),
+        "next_attempt_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+        "updated_at": datetime(2026, 9, 29, tzinfo=timezone.utc),
+    }
+
+
+@pytest.mark.parametrize("status", ["success", "no_data", "permanent_error"])
+def test_estado_final_antigo_vira_evento_final(status: str) -> None:
+    unidade, evento = unidade_e_evento(_fila(status))
+    assert evento is not None
+    assert evento["status"] == status
+    assert evento["revision_marker"] == unidade["revision_marker"] == "rev"
+    assert evento["next_attempt_at"] is None
+    assert json.loads(unidade["params"]) == {"an_exercicio": 2025, "id_ente": 1}
+
+
+@pytest.mark.parametrize("status", ["pending", "running"])
+def test_pendente_e_em_andamento_continuam_pendentes(status: str) -> None:
+    _, evento = unidade_e_evento(_fila(status))
+    assert evento is None
+
+
+def test_retry_antigo_mantem_a_proxima_tentativa() -> None:
+    _, evento = unidade_e_evento(_fila("retry"))
+    assert evento is not None and evento["status"] == "retry"
+    assert evento["next_attempt_at"] == datetime(2026, 10, 1, tzinfo=timezone.utc)
+
+
+def test_contagem_antiga_nos_estados_novos() -> None:
+    antiga = {"success": 3, "pending": 5, "running": 2, "retry": 1}
+    assert status_da_fila_antiga(antiga) == {"success": 3, "pending": 7, "retry": 1}
+
+
+class _ControleFalso:
+    def __init__(self) -> None:
+        self.unidades: list[dict[str, Any]] = []
+        self.eventos: list[tuple[str, dict[str, Any]]] = []
+
+    def insert_units(self, units: list[dict[str, Any]]) -> None:
+        self.unidades.extend(units)
+
+    def record_events(self, endpoint: str, events: list, run_id: str) -> None:
+        self.eventos.extend((endpoint, dict(e)) for e in events)
+
+
+def test_fila_e_convertida_em_lotes_e_continua_de_onde_parou() -> None:
+    linhas = [
+        _fila("success", "a", "dca"),
+        _fila("pending", "b", "rgf"),
+        _fila("no_data", "c", "rreo"),
+    ]
+
+    def ler(endpoint: str, work_key: str, limite: int) -> list[dict[str, Any]]:
+        depois = [
+            r for r in linhas if (r["endpoint"], r["work_key"]) > (endpoint, work_key)
+        ]
+        return sorted(depois, key=lambda r: (r["endpoint"], r["work_key"]))[:limite]
+
+    controle, progresso = _ControleFalso(), _ProgressoFalso()
+    primeira = converter_fila(ler, controle, progresso, lote=2, prazo_s=None)
+
+    assert primeira["total_convertidas"] == 3 and primeira["terminou"]
+    assert [u["work_key"] for u in controle.unidades] == ["a", "b", "c"]
+    assert sorted((ep, ev["work_key"]) for ep, ev in controle.eventos) == [
+        ("dca", "a"),
+        ("rreo", "c"),
+    ]
+    assert progresso.fila == ("rreo", "c", 3)
+
+    segunda = converter_fila(ler, controle, progresso, lote=2)
+    assert segunda["convertidas_neste_run"] == 0
+    assert len(controle.unidades) == 3
