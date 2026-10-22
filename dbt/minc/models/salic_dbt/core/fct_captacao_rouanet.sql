@@ -29,7 +29,7 @@
 -- nao identifica evento: recibo sem PRONAC resolvido, sem id ou sem data.
 --
 -- LIMITE CONHECIDO: a reconciliacao por ano/PRONAC com
--- `agentes_dbt/silver/eventos_fomento_rouanet` -- que le a bronze v1, no
+-- `salic/silver_legado_sac_captacao_proponente` -- que le a bronze v1, no
 -- schema `bronze`, e nao esta v2 -- e o gate G3 e ainda nao foi feita. Ate la
 -- os dois convivem, e nenhum substitui o outro.
 select

@@ -15,7 +15,7 @@ from __future__ import annotations
 from html import escape
 from typing import Any
 
-ORDEM = ["source", "bronze", "silver", "gold", "views", "outros"]
+ORDEM = ["source", "bronze", "silver", "intermediate", "gold", "views", "outros"]
 
 LARGURA_CAIXA = 168
 ALTURA_CAIXA = 40

@@ -1,6 +1,51 @@
 {
   "entregas": [
     {
+      "sha": "eca11e1",
+      "autor": "Wallyson Souza",
+      "data": "2026-10-08",
+      "assunto": "refactor(mapas): move as silvers para models/mapas, na estrutura do ADR 0010",
+      "tipo": "refactor",
+      "escopo": "mapas",
+      "texto": "move as silvers para models/mapas, na estrutura do ADR 0010"
+    },
+    {
+      "sha": "d35e2e5",
+      "autor": "Wallyson Souza",
+      "data": "2026-10-08",
+      "assunto": "fix(mapas): descarta value acima de 100 KB na silver_agent_meta",
+      "tipo": "fix",
+      "escopo": "mapas",
+      "texto": "descarta value acima de 100 KB na silver_agent_meta"
+    },
+    {
+      "sha": "1184ad4",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-07",
+      "assunto": "fix(inep): baixa a intermediária TLS conferida em vez de versionar o .pem",
+      "tipo": "fix",
+      "escopo": "inep",
+      "texto": "baixa a intermediária TLS conferida em vez de versionar o .pem"
+    },
+    {
+      "sha": "26b3bc7",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-07",
+      "assunto": "feat(inep): ingestão dos microdados do Censo Escolar, de 1995 a 2025",
+      "tipo": "feat",
+      "escopo": "inep",
+      "texto": "ingestão dos microdados do Censo Escolar, de 1995 a 2025"
+    },
+    {
+      "sha": "196fd88",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-07",
+      "assunto": "feat(datalakehouse): caminho particionado pelo dado e envio de arquivo em streaming",
+      "tipo": "feat",
+      "escopo": "datalakehouse",
+      "texto": "caminho particionado pelo dado e envio de arquivo em streaming"
+    },
+    {
       "sha": "2bbb7ab",
       "autor": "Caio Melo Borges",
       "data": "2026-10-07",
@@ -674,54 +719,30 @@
       "tipo": "refactor",
       "escopo": "",
       "texto": "altera estrutura de pastas do projeto"
-    },
-    {
-      "sha": "4cc16e1",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-11",
-      "assunto": "fix(cosmos): adiciona fallback nas env_vars do profiles.yml para corrigir parsing da DAG",
-      "tipo": "fix",
-      "escopo": "cosmos",
-      "texto": "adiciona fallback nas env_vars do profiles.yml para corrigir parsing da DAG"
-    },
-    {
-      "sha": "b6b5cdd",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-11",
-      "assunto": "refactor: refatora env.example para conexão com o banco para o dbt",
-      "tipo": "refactor",
-      "escopo": "",
-      "texto": "refatora env.example para conexão com o banco para o dbt"
-    },
-    {
-      "sha": "83ac9e6",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-11",
-      "assunto": "feat(analytics): unifica dados de proponentes LPG e PNAB para Meta 5",
-      "tipo": "feat",
-      "escopo": "analytics",
-      "texto": "unifica dados de proponentes LPG e PNAB para Meta 5"
-    },
-    {
-      "sha": "230960c",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-09",
-      "assunto": "feat: adiciona pipeline dbt para meta 5 de agentes (bronze a gold)",
-      "tipo": "feat",
-      "escopo": "",
-      "texto": "adiciona pipeline dbt para meta 5 de agentes (bronze a gold)"
-    },
-    {
-      "sha": "4236a4e",
-      "autor": "Caio Melo Borges",
-      "data": "2026-04-13",
-      "assunto": "refactor(minc): implementa orquestracao em cascata com triggerdagrun",
-      "tipo": "refactor",
-      "escopo": "minc",
-      "texto": "implementa orquestracao em cascata com triggerdagrun"
     }
   ],
   "pull_requests": [
+    {
+      "numero": 82,
+      "titulo": "refactor(mapas): move as silvers para models/mapas, na estrutura do ADR 0010",
+      "autor": "devwallyson",
+      "data": "2026-10-08",
+      "linhas": 290
+    },
+    {
+      "numero": 81,
+      "titulo": "fix(mapas): descarta value acima de 100 KB na silver_agent_meta",
+      "autor": "devwallyson",
+      "data": "2026-10-08",
+      "linhas": 16
+    },
+    {
+      "numero": 80,
+      "titulo": "feat(inep): ingestão dos microdados do Censo Escolar, de 1995 a 2025",
+      "autor": "CaioMelo25",
+      "data": "2026-10-07",
+      "linhas": 1257
+    },
     {
       "numero": 74,
       "titulo": "fix(cosmos): desliga install_dbt_deps e corta 94% do log de task",
@@ -1066,18 +1087,18 @@
     "2026-07": 11,
     "2026-08": 35,
     "2026-09": 13,
-    "2026-10": 9
+    "2026-10": 14
   },
   "autores": {
-    "Caio Melo Borges": 47,
+    "Caio Melo Borges": 52,
     "Davi de Aguiar Vieira": 36,
     "davi-aguiar-vieira": 36,
     "Tiago Santos Bittencourt": 22,
     "ananunesv": 21,
+    "Wallyson Souza": 20,
     "arthrok": 20,
     "VictorSzk": 20,
     "Joyce Dionizio": 19,
-    "Wallyson Souza": 18,
     "mat054": 18,
     "Joyce": 17,
     "dependabot[bot]": 15,
@@ -1109,10 +1130,10 @@
     "pedro.rossi1": 1
   },
   "totais": {
-    "commits": 383,
-    "entregas": 221,
-    "pull_requests": 46,
+    "commits": 390,
+    "entregas": 226,
+    "pull_requests": 49,
     "primeiro_commit": "2024-12-12",
-    "ultimo_commit": "2026-10-07"
+    "ultimo_commit": "2026-10-08"
   }
 }

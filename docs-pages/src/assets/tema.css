@@ -28,6 +28,7 @@
   /* Camadas do pipeline — a mesma cor no site inteiro */
   --bronze: #a86b2d;
   --silver: #6b7280;
+  --intermediate: #4f6d8a;
   --gold:   #b8860b;
   --source: #4b5563;
 
@@ -247,6 +248,7 @@ code { font-family: var(--mono); font-size: .87em; background: var(--faixa); pad
 .camada { font-size: .74rem; padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; color: #fff; }
 .camada-bronze { background: var(--bronze); }
 .camada-silver { background: var(--silver); }
+.camada-intermediate { background: var(--intermediate); }
 .camada-gold   { background: var(--gold); }
 .camada-views, .camada-outros { background: var(--source); }
 
@@ -274,6 +276,7 @@ figcaption { font-size: .82rem; color: var(--apoio); margin-top: var(--esp-1); }
 .lin-source rect { fill: #eef0f3; }
 .lin-bronze rect { stroke: var(--bronze); }
 .lin-silver rect { stroke: var(--silver); }
+.lin-intermediate rect { stroke: var(--intermediate); }
 .lin-gold rect   { stroke: var(--gold); }
 .lin-views rect  { stroke: var(--source); }
 .lin-alvo rect { fill: var(--roxo-claro); stroke: var(--roxo); stroke-width: 2.5; }
