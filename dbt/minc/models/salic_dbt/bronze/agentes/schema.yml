@@ -152,10 +152,7 @@ models:
         data_type: integer
 
   - name: agentes__vtelefones
-    description: >
-      [NÃO VERIFICADO] Objeto do SALIC ausente do dicionário de dados original (export
-      SchemaSpy). Semântica e grão ainda não confirmados. Camada bronze tipada a partir de
-      salic_bronze.agentes__vtelefones.
+    description: <p>Verificar</p>
     columns:
       - name: idtelefone
         description: >
