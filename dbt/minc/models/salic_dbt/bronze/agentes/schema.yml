@@ -1109,7 +1109,7 @@ models:
         tests:
           - not_null   # inferido do perfil do banco
       - name: tipoendereco
-        description: Código do tipo de endereço.
+        description: Tipo do endereço do agente cultural, como o SALIC o classifica.
         data_type: integer
         tests:
           - not_null   # inferido do perfil do banco
