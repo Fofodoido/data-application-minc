@@ -11,7 +11,7 @@ models:
       Camada Intermediate. Os eventos em que um agente recebeu recurso, de
       três fontes numa forma só: saída de dinheiro das contas do BB Ágil
       (silver_pagamento_bbagil), recibo de captação da Rouanet
-      (silver_legado_sac_captacao_proponente) e captação de projeto
+      (silver_sac_captacao_proponente) e captação de projeto
       audiovisual da Ancine (silver_consulta). Grão: 1 linha por evento da
       fonte.
 
@@ -31,7 +31,7 @@ models:
       tags: [intermediate, bbagil, salic, ancine]
       meta:
         status: Active
-        origem_dados: 'silver_pagamento_bbagil + silver_legado_sac_captacao_proponente + silver_consulta'
+        origem_dados: 'silver_pagamento_bbagil + silver_sac_captacao_proponente + silver_consulta'
         openmetadata:
           domain: Cultura.Fomento Direto
           tier: Tier.Tier2
