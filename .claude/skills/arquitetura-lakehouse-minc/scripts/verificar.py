@@ -39,7 +39,11 @@ MODELS = PROJETO / "models"
 DATA_PRODUCTS = "data_products"
 INTERMEDIATE = "intermediate"
 
-RE_REF = re.compile(r"""\{\{\s*ref\(\s*['"]([^'"]+)['"]\s*\)\s*\}\}""")
+# `ref()` em qualquer posição, não só dentro de `{{ }}`: um `{% set x = ref(...) %}`
+# é dependência igual, e sem isso silvers que descobrem colunas por macro (a
+# origem_da_bronze) saíam com refs=[] e escapavam de R3/R4/R5. Mesma forma que
+# RE_SOURCE, que nunca exigiu as chaves duplas.
+RE_REF = re.compile(r"""\bref\(\s*['"]([^'"]+)['"]\s*\)""")
 RE_SOURCE = re.compile(r"""source\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)""")
 RE_COMENTARIO = re.compile(r"--[^\n]*|/\*.*?\*/|\{#.*?#\}", re.S)
 RE_CONFIG = re.compile(r"\{\{\s*config\(.*?\)\s*\}\}", re.S)
@@ -47,6 +51,21 @@ RE_BRONZE_PROIBIDO = re.compile(
     r"\b(join|where|case|cast|group\s+by|distinct|union)\b|::", re.I
 )
 RE_FALSE_POR_AUSENCIA = re.compile(r"coalesce\s*\([^)]*\bfalse\b[^)]*\)", re.I)
+
+# R8 (heurística, aviso): regra de negócio só na Gold. O script não lê semântica,
+# então aponta em silver/intermediate os padrões típicos de "quem conta" — para
+# o autor confirmar à mão, não para reprovar. Deixados de fora de propósito os
+# filtros de limpeza comuns (comparação de tamanho/formato, `!= '0'`), que dariam
+# ruído. Os três padrões abaixo cobrem os desvios que já custaram revisão:
+# classificação em categoria, piso/teto agregado e escopo por lista.
+RE_NEGOCIO = (
+    (
+        "classificação em categoria (CASE … THEN '<rótulo>')",
+        re.compile(r"\bcase\b.*?\bthen\b\s*'[^']*'", re.I | re.S),
+    ),
+    ("corte agregado (HAVING)", re.compile(r"\bhaving\b", re.I)),
+    ("escopo por lista (IN ('…', …))", re.compile(r"\bin\s*\(\s*'", re.I)),
+)
 
 
 @dataclass
@@ -202,6 +221,19 @@ def _regra_r6(m: Modelo, rel: str, r: Relatorio) -> None:
         )
 
 
+def _regra_r8(m: Modelo, rel: str, r: Relatorio) -> None:
+    """R8 — regra de negócio só na Gold (ADR 0010). Heurística: aponta em
+    silver/intermediate os padrões de 'quem conta' para conferência à mão. É
+    aviso, não violação: o script não distingue classificação de limpeza."""
+    for descricao, rx in RE_NEGOCIO:
+        if rx.search(m.corpo):
+            r.avisa(
+                "R8 regra de negócio fora da Gold",
+                f"{rel}: {m.camada} tem {descricao}; "
+                "regra de negócio é da Gold — confira à mão",
+            )
+
+
 def _regra_bronze(m: Modelo, rel: str, r: Relatorio) -> None:
     """R2 — bronze lê exatamente uma source e nada mais."""
     if len(m.sources) != 1:
@@ -307,8 +339,10 @@ def verificar(escopo: list[Path], indice: dict[str, Modelo], tudo: bool) -> Rela
             _regra_bronze(m, rel, r)
         elif m.camada == "silver":
             _regra_silver(m, rel, refs, r)
+            _regra_r8(m, rel, r)
         elif m.camada == "intermediate":
             _regra_consome_silver("intermediate", "R4 intermediate", m, rel, refs, r)
+            _regra_r8(m, rel, r)
         elif m.camada == "gold":
             _regra_consome_silver("gold", "R5 gold", m, rel, refs, r)
 

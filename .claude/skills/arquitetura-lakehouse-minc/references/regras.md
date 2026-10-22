@@ -9,12 +9,12 @@ primeiro (ADR novo, não edição), depois o script, depois esta lista.
 |---|---|---|---|
 | R1 | Pasta de fonte só tem `bronze_*` e `silver_*`; `intermediate/` só `int_*`; pasta de produto não tem prefixo de camada. Arquivos planos, sem subpasta | automática | nome e profundidade do caminho |
 | R2 | Bronze lê exatamente uma `source()`, nenhum `ref()`, e não tem `join`, `where`, `case`, `cast`, `::`, `distinct`, `union`, `group by` | automática | regex no SQL sem comentários |
-| R3 | Silver não lê `source()`; só faz `ref()` a bronze ou silver **da mesma pasta** | automática | refs resolvidos contra o índice do projeto |
+| R3 | Silver não lê `source()`; só faz `ref()` a bronze ou silver **da mesma pasta** | automática | refs resolvidos contra o índice do projeto; `ref()` é lido em qualquer posição, inclusive dentro de `{% set %}` |
 | R4 | Intermediate não lê `source()`; só faz `ref()` a silver ou intermediate | automática | idem |
 | R5 | Gold não lê `source()` nem bronze; só `ref()` a silver ou intermediate | automática | idem |
 | R6 | Valor ausente fica nulo, nunca vira falso | **aviso** automático | `coalesce(..., false)`; o script não lê semântica, só o padrão |
 | R7 | `+schema` da pasta é o nome da pasta (`intermediate` para a Intermediate) | automática | `dbt_project.yml` |
-| R8 | Regra de negócio final só na Gold (filtro que define "quem conta") | manual | leia o `where` das silvers e intermediates do PR |
+| R8 | Regra de negócio final só na Gold (filtro que define "quem conta") | **aviso** automático + manual | heurística aponta em silver/intermediate: classificação (`CASE … THEN '<rótulo>'`), corte agregado (`HAVING`), escopo por lista (`IN ('…')`). É aviso: o script não distingue classificação de limpeza, então confira à mão. Padrões como estorno (`INTERSECT`) e `status = 'Pago'` a heurística não pega — leia o `where` também |
 | R9 | Bronze guarda histórico permanente e metadados de ingestão | manual | hoje a bronze é recarregada com `DROP`; vale a partir da stack de produção |
 | R10 | Dimensão comum (tempo, território) é Intermediate | manual | nome e refs |
 | R11 | Gold não muda de forma incompatível sem versionamento | manual | diff do `schema.yml` da gold |

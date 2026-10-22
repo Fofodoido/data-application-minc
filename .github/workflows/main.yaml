@@ -41,6 +41,29 @@ jobs:
       - name: Run lint
         run: poetry run make lint-ci || true
 
+  arquitetura:
+    name: Arquitetura (ADR 0010)
+    runs-on: ubuntu-latest
+    # Só em PR: o verificar compara o que mudou com a `main`. Diferente do lint,
+    # este REPROVA — código novo não pode acrescentar violação de camada/nome.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Preparar a main local para o diff
+        run: git branch -f main origin/main
+
+      - uses: ./.github/actions/setup-poetry
+        with:
+          python_version: ${{ env.PYTHON_VERSION }}
+          poetry_version: ${{ env.POETRY_VERSION }}
+          poetry_cache_dir: ${{ env.POETRY_CACHE_DIR }}
+
+      - name: Verificar arquitetura do dbt
+        run: poetry run make verificar
+
   test:
     name: Test
     runs-on: ubuntu-latest

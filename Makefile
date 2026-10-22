@@ -13,7 +13,7 @@ COMPOSE := docker compose --env-file .env -f $(COMPOSE_FILE)
 export PYTHONPATH := $(CURDIR)/dags:$(CURDIR)/plugins:$(CURDIR)/helpers
 export MYPYPATH := $(CURDIR):$(CURDIR)/dags:$(CURDIR)/helpers:$(CURDIR)/plugins
 
-.PHONY: setup lock dbt-manifest format lint lint-ci test compose-config \
+.PHONY: setup lock dbt-manifest format lint lint-ci test verificar compose-config \
         up up-trino down logs-airflow logs-trino trino-cli \
         docs-setup docs-collect docs-build docs-serve docs-clean
 
@@ -51,6 +51,12 @@ lint-ci:
 
 test:
 	poetry run pytest tests
+
+# Arquitetura do dbt contra o ADR 0010 (skill arquitetura-lakehouse-minc).
+# Sem argumento, compara com a `main` local — código novo não pode acrescentar
+# violação. Sai 1 se houver. Avisos (R8) não reprovam.
+verificar:
+	poetry run python3 .claude/skills/arquitetura-lakehouse-minc/scripts/verificar.py
 
 compose-config:
 	$(COMPOSE) config
