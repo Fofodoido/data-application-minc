@@ -5720,7 +5720,7 @@
       "camada": "silver",
       "meta": null,
       "caminho": "dbt/minc/models/salic/silver_sac_captacao_proponente.sql",
-      "descricao": "Camada Silver — um recibo de captação da Lei Rouanet por linha, com o proponente que recebeu o recurso. Junta o recibo (sac__captacao) ao cadastro do projeto pelo PRONAC e tipa; não decide quais recibos contam para um indicador. Grão: 1 linha por recibo de captação.\nO proponente de cada PRONAC vem de sac__projetos (cgccpf), o cadastro oficial do projeto. O PRONAC sai da macro pronac_de_ano_sequencial nas duas tabelas, a mesma do fct_captacao_rouanet. Recibo cujo PRONAC o cadastro não resolve fica de fora sem erro; o teste singular salic_recibo_sem_proponente (severity warn) avisa quando acontece.\nLê a ingestão v2 do SALIC (salic_bronze). Até 21/10/2026 lia a v1 (schema `bronze`) e usava sac__tbapiprojetorouanet como reserva de proponente; a v2 não ingere essa tabela, e o cadastro sozinho já resolvia 100% dos recibos válidos.",
+      "descricao": "Camada Silver — um recibo de captação da Lei Rouanet por linha, com o proponente que recebeu o recurso. Junta o recibo (sac__captacao) ao cadastro do projeto pelo PRONAC e tipa; não decide quais recibos contam para um indicador. Grão: 1 linha por recibo de captação.\nO proponente de cada PRONAC vem de sac__projetos (cgccpf), o cadastro oficial do projeto. O PRONAC sai da macro pronac_de_ano_sequencial nas duas tabelas, a mesma do fct_captacao_rouanet. Recibo cujo PRONAC o cadastro não resolve fica de fora sem erro; o teste singular salic_recibo_sem_proponente (severity warn) avisa por PRONAC, separando PRONAC malformado de ausente do cadastro, e o salic_recibo_sem_proponente_em_massa (severity error) trava o build quando a perda passa de 1% dos recibos.\nLê a ingestão v2 do SALIC (salic_bronze). Até 21/10/2026 lia a v1 (schema `bronze`) e usava sac__tbapiprojetorouanet como reserva de proponente; a v2 não ingere essa tabela, e o cadastro sozinho já resolvia 100% dos recibos válidos.",
       "colunas": [
         {
           "nome": "proponente_documento",
@@ -5751,7 +5751,7 @@
         "bronze_sac_projetos"
       ],
       "sources": [],
-      "linhas_sql": 76
+      "linhas_sql": 77
     },
     {
       "nome": "agentes__agentes",
