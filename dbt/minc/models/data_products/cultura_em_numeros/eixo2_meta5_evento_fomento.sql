@@ -129,11 +129,13 @@ pagamento_efetivo AS (
             )
             OR (e.tipo_lancamento = 'subtransacao' AND e.status_prestacao_contas = 'Pago')
         )
-        -- só depois de parear: sem documento, data ou valor o evento não é
-        -- atribuível a um agente, a um ano nem ao piso
+        -- só depois de parear: sem documento ou data o evento não é
+        -- atribuível a um agente nem a um ano. Valor nulo NÃO sai aqui: no
+        -- BB Ágil o pagamento com value fora do formato numérico sempre contou
+        -- (o piso soma ignorando NULL) e pode ser a data de entrada do agente;
+        -- em SALIC e Ancine o valor > 0 abaixo já o descarta
         AND e.beneficiario_documento IS NOT NULL
         AND e.data_evento IS NOT NULL
-        AND e.valor IS NOT NULL
 ),
 
 elegivel AS (
