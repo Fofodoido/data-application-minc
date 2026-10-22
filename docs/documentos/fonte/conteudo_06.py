@@ -41,9 +41,9 @@ DOC = {
                                 "Sim",
                             ],
                             [
-                                "<code>agentes</code>",
-                                "Tabelas de gold da Meta 5: perfil de agentes e primeiro "
-                                "acesso ao fomento.",
+                                "<code>cultura_em_numeros</code>",
+                                "Tabelas de gold da Meta 5: eventos de fomento e primeiro "
+                                "acesso dos agentes.",
                                 "Sim",
                             ],
                             [
@@ -188,91 +188,87 @@ DOC = {
                     ("h3", "1. Indicador de primeiro acesso"),
                     (
                         "p",
-                        "<code>primeiro_acesso_resumo</code> responde à pergunta central da "
-                        "Meta 5: que fração dos proponentes de cada programa está acessando "
-                        "fomento público pela primeira vez. Cada programa soma 100%.",
+                        "<code>eixo2_meta5_primeiro_acesso_anual</code> responde à pergunta "
+                        "central da Meta 5: que fração dos agentes atendidos por cada mecanismo, "
+                        "em cada ano, nunca havia recebido recurso de fomento federal antes. A "
+                        "linha <code>'TODOS'</code> conta cada agente uma vez só e não é a soma "
+                        "dos mecanismos.",
                     ),
                     (
                         "code",
-                        "select programa_fomento,\n"
-                        "       categoria_primeiro_acesso,\n"
-                        "       total_proponentes,\n"
-                        "       percentual\n"
-                        "from agentes.primeiro_acesso_resumo\n"
-                        "order by programa_fomento, categoria_primeiro_acesso;",
+                        "select ano,\n"
+                        "       programa_fomento,\n"
+                        "       agentes_atendidos,\n"
+                        "       novos_entrantes,\n"
+                        "       percentual_primeiro_acesso,\n"
+                        "       ano_censurado,\n"
+                        "       ano_parcial\n"
+                        "from cultura_em_numeros.eixo2_meta5_primeiro_acesso_anual\n"
+                        "order by programa_fomento, ano;",
                     ),
-                    ("h3", "2. Separar o declarado do inferido"),
+                    ("h3", "2. A porta de entrada de cada agente"),
                     (
                         "p",
-                        "Quando o proponente não respondeu, a categoria é inferida por ordem "
-                        "cronológica entre programas. A tabela de contemplados separa as duas "
-                        "origens em colunas distintas, e é ela que permite citar o indicador "
-                        "com honestidade.",
+                        "<code>eixo2_meta5_primeiro_acesso_agente</code> tem uma linha por agente "
+                        "e mecanismo. Exatamente uma linha por agente é a porta de entrada, o "
+                        "mecanismo pelo qual ele chegou primeiro ao fomento federal.",
                     ),
                     (
                         "code",
                         "select programa_fomento,\n"
-                        "       categoria_primeiro_acesso,\n"
-                        "       contemplado,\n"
-                        "       total_proponentes,\n"
-                        "       total_campo_preenchido,\n"
-                        "       total_inferido,\n"
-                        "       percentual\n"
-                        "from agentes.primeiro_acesso_contemplados\n"
-                        "where contemplado = 'sim'\n"
-                        "order by programa_fomento, categoria_primeiro_acesso;",
+                        "       count(*) filter (where eh_porta_de_entrada) as novos_entrantes,\n"
+                        "       count(*)                                    as agentes\n"
+                        "from cultura_em_numeros.eixo2_meta5_primeiro_acesso_agente\n"
+                        "group by programa_fomento\n"
+                        "order by novos_entrantes desc;",
                     ),
                 ],
                 [
                     (
                         "callout",
                         "shield-check",
-                        "Não some as duas colunas sem dizer",
+                        "Os percentuais são teto",
                         [
-                            "<code>total_campo_preenchido</code> vem de resposta declarada no "
-                            "formulário; <code>total_inferido</code> vem de dedução da "
-                            "plataforma. Somar as duas produz "
-                            "<code>total_proponentes</code>, que é um número legítimo, mas que "
-                            "só deve ser citado junto com a proporção entre as partes.",
+                            "\"Novo entrante\" quer dizer sem evento anterior nas fontes "
+                            "disponíveis, não que o agente nunca acessou. Fonte que falta só "
+                            "transforma veterano em falso novo entrante. Não cite um ano marcado "
+                            "em <code>ano_censurado</code> ou <code>ano_parcial</code> sem dizer "
+                            "que ele está marcado.",
                         ],
                     ),
-                    ("h3", "3. Perfil consolidado do agente"),
+                    ("h3", "3. Do fomento direto à Rouanet"),
                     (
                         "p",
-                        "<code>perfil_agentes_completo</code> é o master data de proponentes: "
-                        "uma linha por CPF ou CNPJ, com a classificação final e a flag de "
-                        "qualidade que diz se ela foi confirmada ou inferida.",
+                        "<code>eixo2_meta5_trajetoria_fomento_direto_rouanet</code> mostra quem "
+                        "entrou pela LAB, LPG ou PNAB e depois captou pela Lei Rouanet, e quem "
+                        "fez o caminho inverso.",
                     ),
                     (
                         "code",
-                        "select tipo_proponente,\n"
-                        "       perfil_classificacao,\n"
-                        "       status_origem,\n"
-                        "       count(*) as agentes\n"
-                        "from agentes.perfil_agentes_completo\n"
-                        "group by 1, 2, 3\n"
+                        "select trajetoria,\n"
+                        "       tipo_pessoa,\n"
+                        "       agentes\n"
+                        "from cultura_em_numeros.eixo2_meta5_trajetoria_fomento_direto_rouanet\n"
                         "order by agentes desc;",
                     ),
-                    ("h3", "4. Cruzar os dois domínios"),
+                    ("h3", "4. Descer ao evento"),
                     (
                         "p",
-                        "Os dois domínios compartilham a mesma chave de agente, o documento "
-                        "normalizado. Isso permite responder perguntas que nenhum dos dois "
-                        "responde sozinho, como quanto foi pago a quem acessa fomento pela "
-                        "primeira vez.",
+                        "<code>eixo2_meta5_evento_fomento</code> é a espinha das demais: uma "
+                        "linha por vez que um agente recebeu recurso, já com o mecanismo "
+                        "classificado. É onde se confere de onde veio um número.",
                     ),
                     (
                         "code",
-                        "select p.perfil_classificacao,\n"
-                        "       count(distinct f.identificador_unico) as agentes,\n"
-                        "       sum(f.valor_pago_num)                 as valor_pago\n"
-                        "from minc_cotas.fct_pagamentos_elegiveis f\n"
-                        "join agentes.perfil_agentes_completo p\n"
-                        "  on p.identificador_unico = f.identificador_unico\n"
-                        "group by 1\n"
-                        "order by valor_pago desc;",
-                        "A junção é um-para-um porque <code>perfil_agentes_completo</code> tem "
-                        "<code>identificador_unico</code> testado como <code>unique</code>.",
+                        "select programa_fomento,\n"
+                        "       ano_evento,\n"
+                        "       count(distinct beneficiario_documento) as agentes,\n"
+                        "       sum(valor)                             as valor\n"
+                        "from cultura_em_numeros.eixo2_meta5_evento_fomento\n"
+                        "group by 1, 2\n"
+                        "order by 1, 2;",
+                        "O valor do BB Ágil é o pago ao agente; o da Rouanet e o da Ancine são "
+                        "captação. Não some mecanismos de naturezas diferentes sem dizer.",
                     ),
                 ],
             ],

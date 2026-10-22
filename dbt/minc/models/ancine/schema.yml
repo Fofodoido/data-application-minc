@@ -1,0 +1,92 @@
+version: 2
+
+# Ancine, na estrutura do ADR 0010. ancine.consulta é carregada fora deste
+# pipeline, direto da planilha da Ancine; bronze_consulta a copia como está e
+# silver_consulta resolve os cabeçalhos e tipa.
+models:
+  - name: bronze_consulta
+    description: >
+      Camada Bronze — cópia fiel de ancine.consulta, sem cast, filtro nem join
+      (ADR 0010). Todas as colunas chegam como na origem.
+      Os cabeçalhos ficam como vieram da planilha (maiúscula, espaço e acento).
+    config:
+      tags:
+        - bronze
+        - ancine
+    meta:
+      openmetadata:
+        domain: Cultura.Audiovisual
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: silver_consulta
+    description: >
+      Camada Silver — uma linha por captação de projeto audiovisual registrada
+      pela Ancine (`ancine.consulta`), tipada e com o documento do proponente
+      normalizado. Todos os mecanismos ficam; escolher quais contam para um
+      indicador é da Gold de cada produto.
+
+      Armadilhas de formato, as duas medidas nesta tabela: a data da origem é
+      TEXT no padrão AMERICANO M/D/YYYY ('7/12/2007' é 12 de julho, não 7 de
+      dezembro), e o valor é TEXT no padrão brasileiro ('50.000,00'). Linha
+      fora desses padrões fica de fora.
+
+      A fonte é quase toda CNPJ — proponente pessoa física é, na prática,
+      invisível aqui.
+    config:
+      tags: [silver, ancine, audiovisual]
+      meta:
+        status: Active
+        origem_dados: 'bronze_consulta'
+        openmetadata:
+          domain: Cultura.Incentivo Fiscal
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+          tags:
+            - Certification.Silver
+          glossary:
+            - MinC.Agentes.Proponente
+    columns:
+      - name: proponente_documento
+        description: >
+          CPF (11) ou CNPJ (14) de quem recebeu a captação, normalizado com
+          LPAD. Documento só de zeros fica de fora.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+            glossary:
+              - MinC.Identificadores.IdentificadorUnico
+        tests:
+          - not_null
+      - name: proponente_nome
+        description: Nome do proponente como a Ancine registra.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.NonSensitive
+      - name: mecanismo
+        description: >
+          Mecanismo de financiamento como a Ancine registra ('FSA', 'ART1',
+          'ART25', 'ART41 (FUNCINES)', 'RENDIMENTOS', 'LEI ESTADUAL'...), sem
+          agrupamento.
+        data_type: text
+      - name: data_captacao
+        description: Data da captação, convertida do formato americano da origem.
+        data_type: date
+        tests:
+          - not_null
+      - name: valor_captacao
+        description: >
+          Valor captado, convertido do formato brasileiro da origem. Pode ser
+          zero ou negativo como na origem.
+        data_type: numeric
+        tests:
+          - not_null
+      - name: no_salic
+        description: >
+          Número do projeto no SALIC anotado pela Ancine. Não vem do SALIC — é
+          coluna da própria `ancine.consulta`.
+        data_type: text

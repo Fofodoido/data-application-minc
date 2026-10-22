@@ -102,8 +102,8 @@ a tabela abaixo é o resumo.
 | Raw | — | — | — (`source`) | `raw/salic/agentes/` |
 | Bronze | `<fonte>` | `bronze_<entidade>` | `<fonte>/bronze_<entidade>.sql` | `salic.bronze_agentes_agentes` |
 | Silver | `<fonte>` | `silver_<entidade>` | `<fonte>/silver_<entidade>.sql` | `salic.silver_agentes_agentes` |
-| Intermediate | `intermediate` | `int_<fonte1>_<fonte2>` | `intermediate/int_<fonte1>_<fonte2>.sql` | `intermediate.int_salic_transferegov` |
-| Gold | `<produto>` | `<nome>`, sem prefixo | `<produto>/<nome>.sql` | `cultura_em_numeros.eixo2_meta3_fct_pagamento_profissional_rouanet` |
+| Intermediate | `intermediate` | `int_<fonte1>_..._<fonteN>` | `intermediate/int_<fonte1>_..._<fonteN>.sql` | `intermediate.int_salic_transferegov` |
+| Gold | `<produto>` | `<nome>`, sem prefixo | `data_products/<produto>/<nome>.sql` | `cultura_em_numeros.eixo2_meta3_fct_pagamento_profissional_rouanet` |
 
 - O nome do arquivo é o nome da tabela. A fonte fica na pasta e no schema,
   não no nome, e não há `alias`.
@@ -118,8 +118,8 @@ a tabela abaixo é o resumo.
 - Produtos de dados citados até agora: `cultura_em_numeros` (Cultura em
   Números), `sefli` e `patrimonio_cultural`.
 
-Pastas no projeto dbt: uma por fonte, uma por produto e uma `intermediate`,
-sem subpasta de camada.
+Pastas no projeto dbt: uma por fonte, uma `intermediate` e, dentro de
+`data_products/`, uma por produto, sem subpasta de camada.
 
 ```text
 dbt/minc/models/
@@ -131,8 +131,9 @@ dbt/minc/models/
 │   └── silver_controle_extracao_bbagil_extrato.sql
 ├── intermediate/
 │   └── int_salic_transferegov.sql
-└── cultura_em_numeros/
-    └── eixo2_meta3_fct_pagamento_profissional_rouanet.sql
+└── data_products/
+    └── cultura_em_numeros/
+        └── eixo2_meta3_fct_pagamento_profissional_rouanet.sql
 ```
 
 Exemplo de ponta a ponta:
@@ -194,7 +195,10 @@ aderência de cada PR.
 ├── dbt/minc/             # projeto dbt, fora do parser de DAGs
 │   └── models/
 │       ├── cotas_dbt/    # Meta 3 — diversidade, cotas e territórios
-│       ├── agentes_dbt/  # Meta 5 — perfil e primeiro acesso
+│       ├── bbagil/, salic/, ancine/, transferegov/, mapas/
+│       │                 # uma pasta por fonte: bronze_* e silver_* (ADR 0010)
+│       ├── intermediate/ # int_*: cruzamento entre fontes
+│       ├── data_products/cultura_em_numeros/  # Gold do produto; a Meta 5 é eixo2_meta5_*
 │       └── metadata/
 ├── helpers/              # utilitários importados pelas DAGs
 ├── plugins/              # clientes de API e extensões usados pelo Airflow

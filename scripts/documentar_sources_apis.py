@@ -54,7 +54,7 @@ DESCR_SOURCE = {
         "tabelas foram carregadas a partir de planilha, e os nomes de coluna sao "
         "os cabecalhos do arquivo original -- com espaco, acento e pontuacao, o "
         "que obriga a citar cada um entre aspas no SQL. `consulta` e consumida "
-        "por agentes_dbt/silver/eventos_fomento_ancine.sql."
+        "por ancine/bronze_consulta.sql."
     ),
     "ibge_sidra": (
         "Agregados, localidades e metadados do SIDRA/IBGE, ingeridos pela DAG "

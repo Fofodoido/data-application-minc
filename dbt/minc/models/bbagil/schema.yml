@@ -1,0 +1,951 @@
+version: 2
+
+# BB Ágil, na estrutura do ADR 0010: bronze_<tabela> é a cópia fiel do que a
+# extracao_bbagil_dag grava em bbagil.<tabela>; silver_<tabela> tipa. Os
+# silver_pagamento_* (Meta 5) leem a silver tipada (silver_extrato_bbagil e
+# silver_subtransacao_bbagil) e só limpam: o que é pagamento efetivo (estorno,
+# só débito, status 'Pago') e quem conta como agente cultural é regra de
+# negócio e mora na Gold eixo2_meta5_evento_fomento.
+models:
+  - name: bronze_controle_extracao_bbagil_extrato
+    description: >
+      Camada Bronze — cópia fiel de bbagil.controle_extracao_bbagil_extrato, sem cast, filtro nem join
+      (ADR 0010). Todas as colunas chegam como na origem.
+    config:
+      tags:
+        - bronze
+        - bbagil
+    meta:
+      openmetadata:
+        domain: Cultura.Repasse Federativo
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: bronze_controle_extracao_bbagil_subtransacoes
+    description: >
+      Camada Bronze — cópia fiel de bbagil.controle_extracao_bbagil_subtransacoes, sem cast, filtro nem join
+      (ADR 0010). Todas as colunas chegam como na origem.
+    config:
+      tags:
+        - bronze
+        - bbagil
+    meta:
+      openmetadata:
+        domain: Cultura.Repasse Federativo
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: bronze_extrato_bbagil
+    description: >
+      Camada Bronze — cópia fiel de bbagil.extrato_bbagil, sem cast, filtro nem join
+      (ADR 0010). Todas as colunas chegam como na origem.
+    config:
+      tags:
+        - bronze
+        - bbagil
+    meta:
+      openmetadata:
+        domain: Cultura.Repasse Federativo
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: bronze_subtransacao_bbagil
+    description: >
+      Camada Bronze — cópia fiel de bbagil.subtransacao_bbagil, sem cast, filtro nem join
+      (ADR 0010). Todas as colunas chegam como na origem.
+    config:
+      tags:
+        - bronze
+        - bbagil
+    meta:
+      openmetadata:
+        domain: Cultura.Repasse Federativo
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: silver_controle_extracao_bbagil_extrato
+    description: >
+      Camada silver tipada de bbagil.controle_extracao_bbagil_extrato, lida de bronze_controle_extracao_bbagil_extrato. 7 colunas, 5 com cast
+      aplicado. Uma linha por plano de acao + conta + periodo tentado.
+    config:
+      tags:
+        - silver
+        - bbagil
+    meta:
+      openmetadata:
+        domain: Cultura.Repasse Federativo
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+    columns:
+      - name: id_plano_acao
+        description: >
+          Tipagem: 100% dos 931528 valores casam com inteiro.
+        data_type: integer
+      - name: id_plano_acao_dado_bancario
+        description: >
+          Conta bancaria consultada, parte da chave do checkpoint. Acrescentada
+          junto com a mudanca de chave de 03/09/2026.
+        data_type: integer
+      - name: periodo_inicial
+        description: >
+          Tipagem: 100% dos 931528 valores casam com data.
+        data_type: date
+      - name: periodo_final
+        description: >
+          Tipagem: 100% dos 931528 valores casam com data.
+        data_type: date
+      - name: status
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+      - name: qtd_transacoes
+        description: >
+          Tipagem: 100% dos 931528 valores casam com inteiro.
+        data_type: integer
+      - name: mensagem_erro
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+
+  - name: silver_controle_extracao_bbagil_subtransacoes
+    description: >
+      Camada silver tipada de bbagil.controle_extracao_bbagil_subtransacoes, lida de bronze_controle_extracao_bbagil_subtransacoes. 6 colunas, 0 com
+      cast aplicado. Uma linha por plano de acao + conta + transacao-mae tentada.
+    config:
+      tags:
+        - silver
+        - bbagil
+    meta:
+      openmetadata:
+        domain: Cultura.Repasse Federativo
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+    columns:
+      - name: id_plano_acao
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: id_plano_acao_dado_bancario
+        description: >
+          Conta bancaria consultada, parte da chave do checkpoint. Acrescentada
+          junto com a mudanca de chave de 03/09/2026.
+        data_type: text
+      - name: id_transacao_pai
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: status
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: qtd_subtransacoes
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: mensagem_erro
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+
+  - name: silver_extrato_bbagil
+    description: >
+      Camada silver tipada de bbagil.extrato_bbagil, lida de bronze_extrato_bbagil. 42 colunas, 22 com cast aplicado.
+    config:
+      tags:
+        - silver
+        - bbagil
+    meta:
+      openmetadata:
+        domain: Cultura.Repasse Federativo
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+    columns:
+      - name: errors
+        description: >
+          Tipagem: coluna sempre nula.
+        data_type: text
+      - name: error
+        description: >
+          Tipagem: coluna sempre nula.
+        data_type: text
+      - name: governmentprogramcode
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: governmentprogramname
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+      - name: governmentsubprogramcode
+        description: >
+          Tipagem: coluna constante.
+        data_type: text
+      - name: governmentsubprogramname
+        description: >
+          Tipagem: coluna constante.
+        data_type: text
+      - name: id_plano_acao
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: id_programa
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: codigo_programa
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: bigint
+      - name: nome_programa
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+      - name: id_plano_acao_dado_bancario
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: id_agencia_conta
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+      - name: cod_ibge
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: periodo_inicial
+        description: >
+          Tipagem: 100% dos 508146 valores casam com data.
+        data_type: date
+      - name: periodo_final
+        description: >
+          Tipagem: 100% dos 508146 valores casam com data.
+        data_type: date
+      - name: id
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro. bigint, e não
+          integer: é a chave da transação no banco, e o perfil mede o padrão,
+          não a faixa.
+        data_type: bigint
+      - name: bookingdate
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+      - name: orderindex
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: valuedate
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+      - name: referencenumber
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: bigint
+      - name: value
+        description: >
+          Tipagem: 100% dos 508146 valores casam com decimal.
+        data_type: numeric
+      - name: accountbalance
+        description: >
+          Tipagem: 407260 valores 'NaN' gravados como texto.
+        data_type: text
+      - name: descriptioncode
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: descriptionname
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+      - name: descriptionbatchnumber
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: creditdebitindicator
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+      - name: beneficiarybankidentifiercode
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: beneficiarybranchcode
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+      - name: beneficiaryaccountnumber
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+      - name: beneficiarypersontype
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: beneficiarydocumentid
+        description: >
+          CPF ou CNPJ do beneficiário como a API devolve, sem zero à esquerda.
+          Fica texto: 100% dos 508146 valores casam com inteiro, mas é
+          identificador, e como integer estouraria a faixa em CPF e CNPJ.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+      - name: beneficiaryname
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.NonSensitive
+      - name: pendingexpenseconciliation
+        description: >
+          Tipagem: 100% dos 508146 valores casam com booleano.
+        data_type: boolean
+      - name: attachedexpensedocumentindicator
+        description: >
+          Tipagem: 100% dos 508146 valores casam com booleano.
+        data_type: boolean
+      - name: expensecategorycode
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: expenseidentificationstatus
+        description: >
+          Tipagem: coluna constante.
+        data_type: text
+      - name: subtransactionquantity
+        description: >
+          Tipagem: 100% dos 508146 valores casam com inteiro.
+        data_type: integer
+      - name: bankorderpurposecode
+        description: >
+          Tipagem: coluna constante.
+        data_type: text
+      - name: bankorderrulecode
+        description: >
+          Tipagem: coluna constante.
+        data_type: text
+      - name: bankorderpurposedescription
+        description: >
+          Tipagem: coluna constante.
+        data_type: text
+      - name: expensescategory
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+      - name: expensesdocuments
+        description: >
+          Tipagem: valores heterogeneos.
+        data_type: text
+
+  - name: silver_subtransacao_bbagil
+    description: >
+      Camada silver tipada de bbagil.subtransacao_bbagil, lida de bronze_subtransacao_bbagil. 33 colunas, 0 com cast aplicado.
+    config:
+      tags:
+        - silver
+        - bbagil
+    meta:
+      openmetadata:
+        domain: Cultura.Repasse Federativo
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+    columns:
+      - name: errors
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: error
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: governmentprogramcode
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: governmentprogramname
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: governmentsubprogramcode
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: governmentsubprogramname
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: id_plano_acao
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: id_transacao_pai
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: id_programa
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: id_plano_acao_dado_bancario
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: id_agencia_conta
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+      - name: cod_ibge
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: id
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: codesubtransactionstate
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: paymentstatus
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: paymentdate
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: value
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: beneficiarybankidentifiercode
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: beneficiarybranchcode
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+      - name: beneficiaryaccountnumber
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+      - name: beneficiarypersontype
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: beneficiarydocumentid
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+      - name: beneficiaryname
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.NonSensitive
+      - name: attachedexpensedocumentindicator
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: expensecategorycode
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: subtransactionaccountabilityindicator
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: subtransactionaccountabilityname
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: bankorderpurposecode
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: bankorderrulecode
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: bankorderpurposedescription
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: expensesequentialnumber
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: expensescategory
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+      - name: expensesdocuments
+        description: >
+          Tipagem: tabela sem permissao de leitura para esta role: o padrao do dado nao pode
+          ser medido, entao nao se tipa.
+        data_type: text
+
+  - name: silver_pagamento_extrato_bbagil
+    description: >
+      Camada Silver — lançamentos do extrato bancário do BB Gestão Ágil,
+      débito e crédito, sem subtransação e com beneficiário informado. Lê a
+      silver_extrato_bbagil e só limpa.
+
+      Grão: 1 linha por transação do extrato — a chave da origem é
+      (id_plano_acao, id_plano_acao_dado_bancario, id). Transações com
+      subtransactionquantity > 0 ficam fora de propósito: nelas o
+      beneficiário real só aparece no sublançamento, e quem os traz é
+      silver_pagamento_subtransacao_bbagil.
+
+      O que é pagamento efetivo não é decidido aqui: o crédito fica, com
+      creditdebitindicator e a chave do pareamento (conta, documento bruto,
+      valor), e a Gold eixo2_meta5_evento_fomento descarta os dois lados de
+      um estorno e fica só com o débito. Quem conta como pagamento a agente
+      cultural também não: repasse a ente público, devolução ao FNC,
+      transferência ao Banco do Brasil e lançamento interno continuam na
+      tabela, para a Gold filtrar.
+    config:
+      tags: [silver, bbagil]
+      meta:
+        status: Active
+        origem_dados: 'silver_extrato_bbagil'
+        openmetadata:
+          domain: Cultura.Fomento Direto
+          tier: Tier.Tier3
+          owner: minc-data-engineering
+          tags:
+            - Certification.Silver
+          glossary:
+            - MinC.Politicas.FundoAFundo
+    columns:
+      - name: id_plano_acao
+        description: >
+          Identificador do plano de ação (ente + programa) dono da conta.
+        data_type: integer
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Identificadores.IdPlanoAcao
+        tests:
+          - not_null
+      - name: id_plano_acao_dado_bancario
+        description: >
+          Identificador da conta bancária no Transferegov. Um plano de ação
+          tem mais de uma conta (os da LPG têm duas) e cada uma é consultada
+          separadamente no BB Ágil — por isso a conta faz parte da chave da
+          tabela raw, do join com as subtransações e da detecção de estorno.
+        data_type: integer
+        tests:
+          - not_null
+      - name: id
+        description: >
+          Identificador da transação no extrato. Usado por
+          silver_pagamento_subtransacao_bbagil para achar a transação-mãe
+          (id_transacao_pai = id, dentro da mesma conta).
+        data_type: bigint
+        tests:
+          - not_null
+      - name: programa_curto
+        description: >
+          Código do programa como o BSC devolve (governmentprogramname — ex.
+          'MINC-LPG-MUNI-AUD', 'MINC-PNAB-2023', 'SECULT-A BLANC-MUN'). Sem
+          classificação: o mapeamento para política de fomento é regra de
+          produto e fica na Gold.
+        data_type: text
+      - name: beneficiario_documento_bruto
+        description: >
+          CPF/CNPJ do beneficiário como a origem devolve, sem zero à esquerda.
+          É a forma em que os códigos especiais aparecem ('191' é o Banco do
+          Brasil, '3793086100189' o Fundo Nacional de Cultura).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+        tests:
+          - not_null
+      - name: beneficiario_documento
+        description: >
+          CPF/CNPJ do beneficiário, normalizado (LPAD por
+          beneficiarypersontype — 11 dígitos p/ CPF, 14 p/ CNPJ).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+            glossary:
+              - MinC.Identificadores.IdentificadorUnico
+        tests:
+          # nulo quando beneficiarypersontype não é 1 nem 2; a linha fica
+          # para o pareamento de estorno, e a Gold a descarta depois
+          - not_null:
+              config:
+                severity: warn
+      - name: beneficiario_nome
+        description: >
+          Nome do beneficiário, como o BSC devolve. É nele que a Gold reconhece
+          repasse a ente público (MUNICIPIO, ESTADO, FUNDO, SECRETARIA, SEFAZ).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.NonSensitive
+      - name: descriptionname
+        description: >
+          Descrição do lançamento no extrato. É nela que a Gold reconhece
+          lançamento interno da conta (aplicação, resgate, imposto, ordem
+          bancária cancelada).
+        data_type: text
+      - name: creditdebitindicator
+        description: >
+          'D' (débito, saída de dinheiro da conta) ou 'C' (crédito). A Gold
+          usa para parear estorno e para ficar só com o débito.
+        data_type: text
+      - name: valor
+        description: >
+          Valor do lançamento, em reais, como a origem registra.
+        data_type: numeric
+        tests:
+          # nulo quando o valor da origem está fora do padrão numérico; aviso
+          # para conferir a origem, e a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
+      - name: data_pagamento
+        description: >
+          Data do lançamento, convertida para DATE.
+        data_type: date
+        tests:
+          # nulo quando a data está vazia ou não é data de calendário
+          # (macro data_texto); a Gold descarta depois de parear o estorno
+          - not_null:
+              config:
+                severity: warn
+
+  - name: silver_pagamento_subtransacao_bbagil
+    description: >
+      Camada Silver — sublançamentos do BB Gestão Ágil, usados quando a
+      transação-mãe do extrato tem subtransactionquantity > 0 (o
+      beneficiário real só aparece aqui), com beneficiário informado. Todos
+      os status ficam: o recorte do 'Pago' é da Gold.
+
+      Grão: 1 linha por sublançamento. Complementa
+      silver_pagamento_extrato_bbagil sem sobrepô-lo; os dois juntos formam
+      silver_pagamento_bbagil.
+
+      O valor vem em módulo (ABS): no sublançamento o sinal indica o lado da
+      partida dobrada, não devolução. Repasse a ente público continua na
+      tabela, para a Gold filtrar.
+    config:
+      tags: [silver, bbagil]
+      meta:
+        status: Active
+        origem_dados: 'silver_subtransacao_bbagil + silver_extrato_bbagil'
+        openmetadata:
+          domain: Cultura.Fomento Direto
+          tier: Tier.Tier3
+          owner: minc-data-engineering
+          tags:
+            - Certification.Silver
+          glossary:
+            - MinC.Politicas.FundoAFundo
+    columns:
+      - name: id_plano_acao
+        description: >
+          Identificador do plano de ação (ente + programa) dono da conta.
+        data_type: integer
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Identificadores.IdPlanoAcao
+        tests:
+          - not_null
+      - name: id_plano_acao_dado_bancario
+        description: >
+          Identificador da conta bancária no Transferegov. Um plano de ação
+          tem mais de uma conta (os da LPG têm duas) e cada uma é consultada
+          separadamente no BB Ágil — por isso a conta faz parte da chave da
+          tabela raw, do join com as subtransações e da detecção de estorno.
+        data_type: integer
+        tests:
+          - not_null
+      - name: programa_curto
+        description: >
+          Código do programa, herdado da transação-mãe do extrato,
+          como o BSC devolve (governmentprogramname — ex.
+          'MINC-LPG-MUNI-AUD', 'MINC-PNAB-2023', 'SECULT-A BLANC-MUN'). Sem
+          classificação: o mapeamento para política de fomento é regra de
+          produto e fica na Gold.
+        data_type: text
+      - name: beneficiario_documento_bruto
+        description: >
+          CPF/CNPJ do beneficiário como a origem devolve, sem zero à esquerda.
+          É a forma em que os códigos especiais aparecem ('191' é o Banco do
+          Brasil, '3793086100189' o Fundo Nacional de Cultura).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+        tests:
+          - not_null
+      - name: beneficiario_documento
+        description: >
+          CPF/CNPJ do beneficiário, normalizado (LPAD por
+          beneficiarypersontype — 11 dígitos p/ CPF, 14 p/ CNPJ).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+            glossary:
+              - MinC.Identificadores.IdentificadorUnico
+        tests:
+          # nulo quando beneficiarypersontype não é 1 nem 2; aviso para
+          # conferir a origem, e a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
+      - name: beneficiario_nome
+        description: >
+          Nome do beneficiário, como o BSC devolve. É nele que a Gold reconhece
+          repasse a ente público (MUNICIPIO, ESTADO, FUNDO, SECRETARIA, SEFAZ).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.NonSensitive
+      - name: valor
+        description: >
+          Valor do sublançamento (em módulo), em reais.
+        data_type: numeric
+        tests:
+          # nulo quando o valor da origem está fora do padrão numérico; aviso
+          # para conferir a origem, e a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
+      - name: data_pagamento
+        description: >
+          Data do lançamento, convertida para DATE.
+        data_type: date
+        tests:
+          # nulo quando a data está vazia ou não é data de calendário
+          # (macro data_texto); a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
+      - name: status_prestacao_contas
+        description: >
+          Status do sublançamento na prestação de contas
+          (subtransactionaccountabilityname). 'Pago' é o que chegou ao
+          beneficiário; a Gold fica só com ele.
+        data_type: text
+
+  - name: silver_pagamento_bbagil
+    description: >
+      Camada Silver — une silver_pagamento_extrato_bbagil e
+      silver_pagamento_subtransacao_bbagil em 1 linha por movimento de
+      dinheiro com beneficiário informado, com tipo_lancamento dizendo de
+      qual lado a linha veio.
+
+      Não decide o que é pagamento efetivo (estorno, só débito, status
+      'Pago'), não classifica programa nem decide quem conta como agente
+      cultural: as linhas saem como a limpeza deixou, com as colunas que a
+      Gold usa para essas decisões. Alimenta int_ancine_bbagil_salic.
+    config:
+      tags: [silver, bbagil]
+      meta:
+        status: Active
+        origem_dados: 'silver_pagamento_extrato_bbagil + silver_pagamento_subtransacao_bbagil'
+        openmetadata:
+          domain: Cultura.Fomento Direto
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+          tags:
+            - Certification.Silver
+          glossary:
+            - MinC.Politicas.FundoAFundo
+    columns:
+      - name: tipo_lancamento
+        description: >
+          'extrato' (transação-folha do extrato) ou 'subtransacao'
+          (sublançamento de uma transação repartida).
+        data_type: text
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['extrato', 'subtransacao']
+      - name: id_plano_acao
+        description: >
+          Identificador do plano de ação (ente + programa) dono da conta.
+        data_type: integer
+        meta:
+          openmetadata:
+            glossary:
+              - MinC.Identificadores.IdPlanoAcao
+        tests:
+          - not_null
+      - name: id_plano_acao_dado_bancario
+        description: >
+          Identificador da conta bancária no Transferegov. Um plano de ação
+          tem mais de uma conta (os da LPG têm duas) e cada uma é consultada
+          separadamente no BB Ágil — por isso a conta faz parte da chave da
+          tabela raw, do join com as subtransações e da detecção de estorno.
+        data_type: integer
+        tests:
+          - not_null
+      - name: programa_curto
+        description: >
+          Código do programa como o BSC devolve (governmentprogramname — ex.
+          'MINC-LPG-MUNI-AUD', 'MINC-PNAB-2023', 'SECULT-A BLANC-MUN'). Sem
+          classificação: o mapeamento para política de fomento é regra de
+          produto e fica na Gold.
+        data_type: text
+      - name: beneficiario_documento_bruto
+        description: >
+          CPF/CNPJ do beneficiário como a origem devolve, sem zero à esquerda.
+          É a forma em que os códigos especiais aparecem ('191' é o Banco do
+          Brasil, '3793086100189' o Fundo Nacional de Cultura).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+        tests:
+          - not_null
+      - name: beneficiario_documento
+        description: >
+          CPF/CNPJ do beneficiário, normalizado (LPAD por
+          beneficiarypersontype — 11 dígitos p/ CPF, 14 p/ CNPJ).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+            glossary:
+              - MinC.Identificadores.IdentificadorUnico
+        tests:
+          # nulo quando beneficiarypersontype não é 1 nem 2; a linha fica
+          # para o pareamento de estorno, e a Gold a descarta depois
+          - not_null:
+              config:
+                severity: warn
+      - name: beneficiario_nome
+        description: >
+          Nome do beneficiário, como o BSC devolve. É nele que a Gold reconhece
+          repasse a ente público (MUNICIPIO, ESTADO, FUNDO, SECRETARIA, SEFAZ).
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.NonSensitive
+      - name: descriptionname
+        description: >
+          Descrição do lançamento no extrato; nula no sublançamento. É nela que a Gold reconhece
+          lançamento interno da conta (aplicação, resgate, imposto, ordem
+          bancária cancelada).
+        data_type: text
+      - name: creditdebitindicator
+        description: >
+          No extrato, 'D' (débito) ou 'C' (crédito). Nulo no sublançamento,
+          que é sempre saída para o beneficiário.
+        data_type: text
+      - name: status_prestacao_contas
+        description: >
+          No sublançamento, o status na prestação de contas ('Pago' é o que
+          chegou ao beneficiário). Nulo no extrato.
+        data_type: text
+      - name: valor
+        description: >
+          Valor do lançamento, em reais.
+        data_type: numeric
+        tests:
+          # nulo quando o valor da origem está fora do padrão numérico; aviso
+          # para conferir a origem, e a Gold não conta o evento
+          - not_null:
+              config:
+                severity: warn
+      - name: data_pagamento
+        description: >
+          Data do lançamento, convertida para DATE.
+        data_type: date
+        tests:
+          # nulo quando a data está vazia ou não é data de calendário
+          # (macro data_texto); a Gold descarta depois de parear o estorno
+          - not_null:
+              config:
+                severity: warn

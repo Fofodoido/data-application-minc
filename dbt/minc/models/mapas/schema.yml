@@ -20,7 +20,7 @@ models:
         origem_dados: 'mapas.bronze_agent'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -128,7 +128,7 @@ models:
         origem_dados: 'mapas.bronze_agent_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -179,7 +179,7 @@ models:
         origem_dados: 'mapas.bronze_agent_relation'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -236,7 +236,7 @@ models:
         origem_dados: 'mapas.bronze_usr'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -281,7 +281,7 @@ models:
         origem_dados: 'mapas.bronze_chat_message'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -331,7 +331,7 @@ models:
         origem_dados: 'mapas.bronze_chat_thread'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -390,7 +390,7 @@ models:
         origem_dados: 'mapas.bronze_cultbr_request_log'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -445,7 +445,7 @@ models:
         origem_dados: 'mapas.bronze_cultbr_request_log_attempt'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -524,7 +524,7 @@ models:
         origem_dados: 'mapas.bronze_db_update'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -555,7 +555,7 @@ models:
         origem_dados: 'mapas.bronze_evaluation_method_configuration'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -602,7 +602,7 @@ models:
         origem_dados: 'mapas.bronze_evaluationmethodconfiguration_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -644,7 +644,7 @@ models:
         origem_dados: 'mapas.bronze_event'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -719,7 +719,7 @@ models:
         origem_dados: 'mapas.bronze_event_attendance'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -782,7 +782,7 @@ models:
         origem_dados: 'mapas.bronze_event_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -824,7 +824,7 @@ models:
         origem_dados: 'mapas.bronze_event_occurrence'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -915,7 +915,7 @@ models:
         origem_dados: 'mapas.bronze_event_occurrence_cancellation'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -950,7 +950,7 @@ models:
         origem_dados: 'mapas.bronze_event_occurrence_recurrence'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -993,7 +993,7 @@ models:
         origem_dados: 'mapas.bronze_federative_entity'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1044,7 +1044,7 @@ models:
         origem_dados: 'mapas.bronze_file'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1115,7 +1115,7 @@ models:
         origem_dados: 'mapas.bronze_metadata'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1157,7 +1157,7 @@ models:
         origem_dados: 'mapas.bronze_metalist'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1216,7 +1216,7 @@ models:
         origem_dados: 'mapas.bronze_notification'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1270,7 +1270,7 @@ models:
         origem_dados: 'mapas.bronze_notification_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1312,7 +1312,7 @@ models:
         origem_dados: 'mapas.bronze_opportunity'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1431,7 +1431,7 @@ models:
         origem_dados: 'mapas.bronze_opportunity_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1474,7 +1474,7 @@ models:
         origem_dados: 'mapas.bronze_procuration'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1514,7 +1514,7 @@ models:
         origem_dados: 'mapas.bronze_project'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1593,7 +1593,7 @@ models:
         origem_dados: 'mapas.bronze_project_event'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1636,7 +1636,7 @@ models:
         origem_dados: 'mapas.bronze_project_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1678,7 +1678,7 @@ models:
         origem_dados: 'mapas.bronze_registration'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1789,7 +1789,7 @@ models:
         origem_dados: 'mapas.bronze_registration_evaluation'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1856,7 +1856,7 @@ models:
         origem_dados: 'mapas.bronze_registration_field_configuration'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -1947,7 +1947,7 @@ models:
         origem_dados: 'mapas.bronze_registration_file_configuration'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2026,7 +2026,7 @@ models:
         origem_dados: 'mapas.bronze_registration_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2068,7 +2068,7 @@ models:
         origem_dados: 'mapas.bronze_registration_step'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2119,7 +2119,7 @@ models:
         origem_dados: 'mapas.bronze_registration_workplan'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2162,7 +2162,7 @@ models:
         origem_dados: 'mapas.bronze_registration_workplan_goal'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2209,7 +2209,7 @@ models:
         origem_dados: 'mapas.bronze_registration_workplan_goal_delivery'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2256,7 +2256,7 @@ models:
         origem_dados: 'mapas.bronze_registration_workplan_goal_delivery_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2295,7 +2295,7 @@ models:
         origem_dados: 'mapas.bronze_registration_workplan_goal_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2334,7 +2334,7 @@ models:
         origem_dados: 'mapas.bronze_registration_workplan_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2373,7 +2373,7 @@ models:
         origem_dados: 'mapas.bronze_request'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2444,7 +2444,7 @@ models:
         origem_dados: 'mapas.bronze_role'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2483,7 +2483,7 @@ models:
         origem_dados: 'mapas.bronze_seal'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2554,7 +2554,7 @@ models:
         origem_dados: 'mapas.bronze_seal_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2596,7 +2596,7 @@ models:
         origem_dados: 'mapas.bronze_seal_relation'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2659,7 +2659,7 @@ models:
         origem_dados: 'mapas.bronze_security_allowlist'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2721,7 +2721,7 @@ models:
         origem_dados: 'mapas.bronze_security_blacklist'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2799,7 +2799,7 @@ models:
         origem_dados: 'mapas.bronze_security_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2837,7 +2837,7 @@ models:
         origem_dados: 'mapas.bronze_space'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2937,7 +2937,7 @@ models:
         origem_dados: 'mapas.bronze_space_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -2979,7 +2979,7 @@ models:
         origem_dados: 'mapas.bronze_space_relation'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -3026,7 +3026,7 @@ models:
         origem_dados: 'mapas.bronze_subsite'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -3085,7 +3085,7 @@ models:
         origem_dados: 'mapas.bronze_subsite_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -3127,7 +3127,7 @@ models:
         origem_dados: 'mapas.bronze_system_role'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -3182,7 +3182,7 @@ models:
         origem_dados: 'mapas.bronze_term'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -3221,7 +3221,7 @@ models:
         origem_dados: 'mapas.bronze_term_relation'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -3261,7 +3261,7 @@ models:
         origem_dados: 'mapas.bronze_user_app'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver
@@ -3308,7 +3308,7 @@ models:
         origem_dados: 'mapas.bronze_user_meta'
         openmetadata:
           domain: Cultura.Cadastro Cultural
-          tier: Tier.Tier3
+          tier: Tier.Tier2
           owner: minc-data-engineering
           tags:
             - Certification.Silver

@@ -32,6 +32,9 @@ odfpy = "1.4.1"
 python-calamine = "0.6.2"
 
 [tool.poetry.group.dev.dependencies]
+# edita o YAML do dbt a partir de sugestão do OpenMetadata
+# (scripts/aplicar_sugestao.py); o workflow instala por conta própria
+ruamel-yaml = ">=0.18,<0.20"
 black = "*"
 ruff = "*"
 pytest = "*"
