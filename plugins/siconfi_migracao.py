@@ -41,6 +41,7 @@ from psycopg2.extensions import connection as Connection
 from psycopg2.extras import RealDictCursor
 
 import datalakehouse
+from cliente_siconfi import request_hash
 from siconfi_controle import FINAL_STATUSES, SiconfiControle, params_json
 from siconfi_storage import FONTE, VALID_ENDPOINTS, entidade, gravar_envelope
 
@@ -97,6 +98,13 @@ _SQL_LOTE_FILA = sql.SQL(
 _SQL_STATUS_FILA = sql.SQL(
     "SELECT status, count(*) FROM {schema}.work_queue GROUP BY status"
 )
+# Até 200 unidades de cada endpoint, pela chave primária (endpoint, work_key).
+_SQL_AMOSTRA_FILA = sql.SQL(
+    "SELECT a.endpoint, a.work_key, a.params "
+    "FROM (SELECT DISTINCT endpoint FROM {schema}.work_queue) e, LATERAL ("
+    "SELECT q.endpoint, q.work_key, q.params FROM {schema}.work_queue q "
+    "WHERE q.endpoint = e.endpoint ORDER BY q.work_key LIMIT 200) a"
+)
 # Tudo o que a conversão manda para a origem. O teste confere que é só leitura.
 _SQL_ORIGEM = (
     _SQL_LOTE,
@@ -106,6 +114,7 @@ _SQL_ORIGEM = (
     _SQL_RUNS,
     _SQL_LOTE_FILA,
     _SQL_STATUS_FILA,
+    _SQL_AMOSTRA_FILA,
 )
 
 _CONTROL = sql.Identifier(CONTROLE_ANTIGO)
@@ -354,22 +363,41 @@ def converter_fila(
     }
 
 
+def chaves_divergentes(linhas: list[Mapping[str, Any]]) -> list[str]:
+    """``work_key`` da fila antiga que não batem com o ``request_hash`` de hoje.
+
+    A ingestão nova reconhece uma unidade já baixada pela chave: se o
+    ``work_key`` antigo não for o ``request_hash`` dos mesmos parâmetros, o
+    planejamento gera a unidade de novo e ela é baixada outra vez.
+    """
+    return [
+        str(linha["work_key"])
+        for linha in linhas
+        if request_hash(str(linha["endpoint"]), dict(linha["params"]))
+        != linha["work_key"]
+    ]
+
+
 def avaliar_fila(
     contagem_antiga: Mapping[str, int],
     convertidas: int,
     contagem_nova: Mapping[str, int],
+    chaves_conferidas: int = 0,
+    divergentes: int = 0,
 ) -> dict[str, Any]:
     """Situação da fila convertida: ``completo``, ``em_andamento`` ou ``inconsistente``.
 
     Os estados não são comparados um a um para decidir: depois da conversão, a
     ingestão nova muda o estado das unidades (pendente vira ``success``) e
-    planeja unidades novas. O que não pode acontecer é perder unidade: com a
+    planeja unidades novas. O que não pode acontecer é perder unidade -- com a
     conversão terminada, o controle novo tem de ter pelo menos todas as
-    unidades da fila antiga.
+    unidades da fila antiga -- nem chave antiga diferente do ``request_hash``.
     """
     na_origem = sum(contagem_antiga.values())
     no_controle = sum(contagem_nova.values())
-    if convertidas < na_origem:
+    if divergentes:
+        situacao = "inconsistente"
+    elif convertidas < na_origem:
         situacao = "em_andamento"
     elif convertidas == na_origem and no_controle >= na_origem:
         situacao = "completo"
@@ -381,8 +409,17 @@ def avaliar_fila(
         "unidades_na_origem": na_origem,
         "convertidas": convertidas,
         "unidades_no_controle": no_controle,
+        "chaves_conferidas": chaves_conferidas,
+        "chaves_divergentes": divergentes,
         "situacao": situacao,
     }
+
+
+def pendencias(relatorio: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """O que ainda está ``em_andamento`` no relatório da ``conferir``."""
+    return sorted(
+        nome for nome, r in relatorio.items() if r.get("situacao") == "em_andamento"
+    )
 
 
 def status_da_fila_antiga(
@@ -506,6 +543,13 @@ def contagem_da_fila_antiga(conn: Connection) -> dict[str, int]:
     with conn.cursor() as cur:
         cur.execute(_SQL_STATUS_FILA.format(schema=_CONTROL))
         return {str(s): int(n) for s, n in cur.fetchall()}
+
+
+def amostra_da_fila_antiga(conn: Connection) -> list[dict[str, Any]]:
+    """Até 200 unidades de cada endpoint da fila antiga, para conferir a chave."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(_SQL_AMOSTRA_FILA.format(schema=_CONTROL))
+        return [dict(row) for row in cur.fetchall()]
 
 
 class ProgressoPostgres:

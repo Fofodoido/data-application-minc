@@ -94,7 +94,6 @@ from siconfi_storage import (
     persist_page,
     plan_from_extrato,
     prefixo_raw_do_run,
-    raw_keys,
 )
 
 logger = logging.getLogger(__name__)
@@ -284,10 +283,25 @@ def _anunciar(endpoint: str) -> str:
     """
     run_id, data = _run()
     prefixo = prefixo_raw_do_run(endpoint, run_id, data)
-    if not raw_keys(endpoint, prefixo):
+    # Pede uma chave só: listar a pasta inteira de uma MSC só para saber se
+    # está vazia materializaria centenas de milhares de nomes.
+    if not datalakehouse.existe_objeto(prefixo):
         raise AirflowSkipException(f"nada gravado em {prefixo}")
     datalakehouse.publicar_cadeia(_asset(endpoint), {entidade(endpoint): prefixo})
     return prefixo
+
+
+@task
+def preparar_controle() -> None:
+    """Confere o conector e garante tabelas e índices, uma vez por run."""
+    controle_do_airflow(garantir_tabelas=True)
+
+
+@task(trigger_rule=TriggerRule.ONE_FAILED)
+def falhar_se_algo_falhou() -> None:
+    """Deixa o run vermelho: as tasks ``anunciar_*`` terminam bem mesmo quando a
+    ingestão de antes falhou, e esconderiam a falha."""
+    raise AirflowFailException("uma ou mais tasks da ingestão SICONFI falharam")
 
 
 @dag(
@@ -326,23 +340,18 @@ def siconfi_ingestion_dag() -> None:
     def anunciar(endpoint: str) -> str:
         return _anunciar(endpoint)
 
-    @task(trigger_rule=TriggerRule.ONE_FAILED)
-    def falhar_se_algo_falhou() -> None:
-        """Deixa o run vermelho: as tasks ``anunciar_*`` terminam bem mesmo
-        quando a ingestão de antes falhou, e esconderiam a falha."""
-        raise AirflowFailException("uma ou mais tasks da ingestão SICONFI falharam")
-
     def anuncio(endpoint: str) -> Any:
         return anunciar.override(
             task_id=f"anunciar_{entidade(endpoint)}", outlets=[_asset(endpoint)]
         )(endpoint)
 
+    preparar = preparar_controle()
     refresh = refresh_reference_data()
     extrato = plan_extrato()
     ingest_extrato = ingest.override(task_id="ingest_extrato")("extrato_entregas")
     planned_facts = plan_facts()
-    tarefas: list[Any] = [refresh, extrato, ingest_extrato, planned_facts]
-    refresh >> extrato >> ingest_extrato >> planned_facts
+    tarefas: list[Any] = [preparar, refresh, extrato, ingest_extrato, planned_facts]
+    preparar >> refresh >> extrato >> ingest_extrato >> planned_facts
     for endpoint in _REFERENCE_ENDPOINTS:
         tarefas.append(refresh >> anuncio(endpoint))
     tarefas.append(ingest_extrato >> anuncio("extrato_entregas"))

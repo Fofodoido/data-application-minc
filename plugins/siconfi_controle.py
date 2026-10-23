@@ -110,8 +110,12 @@ TARGET_CATALOG_VAR = "siconfi_trino_target_catalog"
 CONTROL_SCHEMA_VAR = "siconfi_trino_control_schema"
 
 
-def controle_do_airflow() -> SiconfiControle:
-    """O controle com o catálogo e o schema das Variables, e as tabelas criadas."""
+def controle_do_airflow(garantir_tabelas: bool = False) -> SiconfiControle:
+    """O controle com o catálogo e o schema das Variables.
+
+    ``garantir_tabelas`` cria o schema, as tabelas e os índices. Cada DAG faz isso
+    uma vez por run, numa task própria antes das outras, e não em cada task.
+    """
     from airflow.sdk import Variable
 
     controle = SiconfiControle(
@@ -119,7 +123,8 @@ def controle_do_airflow() -> SiconfiControle:
         catalog=Variable.get(TARGET_CATALOG_VAR, default=DEFAULT_CATALOG),
         schema=Variable.get(CONTROL_SCHEMA_VAR, default=DEFAULT_SCHEMA),
     )
-    controle.ensure_tables()
+    if garantir_tabelas:
+        controle.ensure_tables()
     return controle
 
 
@@ -178,7 +183,25 @@ class SiconfiControle:
                 + ", ".join(linhas[inicio : inicio + _CHUNK])
             )
 
+    def verificar_conector(self) -> None:
+        """Falha cedo, e com o motivo, se o catálogo não tem o que o controle usa.
+
+        As leituras saem pela table function ``system.query`` e os índices, pela
+        procedure ``system.execute``: as duas dependem da versão do conector
+        PostgreSQL do Trino.
+        """
+        try:
+            self._nativo("SELECT 1")
+        except Exception as exc:
+            raise RuntimeError(
+                f"o catálogo {self.catalog!r} do Trino não respondeu à table function "
+                "system.query. O controle do SICONFI precisa de um conector "
+                "PostgreSQL com system.query e system.execute (medido no Trino "
+                f"478). Erro original: {exc}"
+            ) from exc
+
     def ensure_tables(self) -> None:
+        self.verificar_conector()
         self.executor.run(
             f"CREATE SCHEMA IF NOT EXISTS "
             f"{quote_ident(self.catalog)}.{quote_ident(self.schema)}"

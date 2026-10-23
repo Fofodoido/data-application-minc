@@ -19,8 +19,10 @@ menos antes que ela planeje: sem a fila convertida, ela não sabe o que já foi
 baixado. E só com a versão nova da ingestão no ar: enquanto a antiga gravar no
 ``siconfi_bronze``, a conversão nunca alcança o fim.
 
-Cada task para em ``max_run_minutes`` e guarda o progresso. Dispare de novo até a
-task ``conferir`` registrar tudo como ``completo``. Ela compara a origem com os
+Cada task para em ``max_run_minutes`` e guarda o progresso. **Run verde não quer
+dizer conversão completa**: parar pelo limite ou pelo prazo não é falha. O sinal de
+fim é a task ``conversao_completa``: verde quando tudo terminou, pulada (skipped)
+enquanto falta algo. Dispare de novo até ela ficar verde. Ela compara a origem com os
 arquivos de verdade no raw, por pasta de run, e falha se uma tabela dada como
 copiada não tiver os arquivos esperados, ou se a fila convertida tiver menos
 unidades que a antiga. A task ``falhar_se_algo_falhou`` deixa o
@@ -37,7 +39,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from airflow.sdk.exceptions import AirflowFailException
+from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException
 from airflow.sdk import Param, TriggerRule, dag, get_current_context, task
 
 from postgres_helpers import get_postgres_conn
@@ -45,8 +47,10 @@ from siconfi_controle import controle_do_airflow
 from siconfi_migracao import (
     ENDPOINTS,
     ProgressoPostgres,
+    amostra_da_fila_antiga,
     avaliar_fila,
     avaliar_tabela,
+    chaves_divergentes,
     conexao_origem,
     contagem_da_fila_antiga,
     converter_fila,
@@ -56,6 +60,7 @@ from siconfi_migracao import (
     leitor_de_lotes,
     migrar_endpoint,
     objetos_dos_runs,
+    pendencias,
     runs_na_origem,
     tabela_antiga,
     tabela_existe,
@@ -140,10 +145,16 @@ def _conferir() -> dict[str, Any]:
                 objetos_no_raw=objetos_dos_runs(endpoint, runs),
             )
         if fila_existe(conn):
+            amostra = amostra_da_fila_antiga(conn)
+            divergentes = chaves_divergentes(amostra)
+            if divergentes:
+                logger.error("[siconfi] work_key != request_hash: %s", divergentes[:10])
             relatorio["fila"] = avaliar_fila(
                 contagem_da_fila_antiga(conn),
                 progresso.ler_fila()[2],
                 controle_do_airflow().latest_status_counts(),
+                chaves_conferidas=len(amostra),
+                divergentes=len(divergentes),
             )
     for nome, linha in relatorio.items():
         logger.info("[siconfi] %s: %s", nome, linha)
@@ -152,8 +163,9 @@ def _conferir() -> dict[str, Any]:
     ]
     if inconsistentes:
         raise AirflowFailException(
-            f"conversão inconsistente (arquivo faltando no raw ou unidade "
-            f"faltando no controle): {inconsistentes}"
+            f"conversão inconsistente (arquivo faltando no raw, unidade faltando "
+            f"no controle ou chave antiga diferente do request_hash): "
+            f"{inconsistentes}"
         )
     return relatorio
 
@@ -213,7 +225,7 @@ def siconfi_migracao_raw_pages_dag() -> None:
     def preparar() -> None:
         """Cria as tabelas uma vez, antes das cópias, e não em cada uma delas."""
         _progresso().garantir_tabelas()
-        controle_do_airflow()
+        controle_do_airflow(garantir_tabelas=True)
 
     @task(execution_timeout=timedelta(hours=2))
     def migrar(endpoint: str) -> dict[str, Any]:
@@ -227,6 +239,21 @@ def siconfi_migracao_raw_pages_dag() -> None:
     def conferir() -> dict[str, Any]:
         return _conferir()
 
+    @task
+    def conversao_completa(relatorio: dict[str, Any]) -> str:
+        """Verde só quando tudo foi convertido.
+
+        Parar pelo limite ou pelo prazo deixa o run verde, porque não é falha. Esta
+        task é o sinal de fim: enquanto houver tabela ou fila ``em_andamento``, ela
+        é pulada, e é preciso disparar a DAG de novo.
+        """
+        faltam = pendencias(relatorio)
+        if faltam:
+            raise AirflowSkipException(
+                f"conversão incompleta, dispare de novo: {', '.join(faltam)}"
+            )
+        return "conversão completa"
+
     @task(trigger_rule=TriggerRule.ONE_FAILED)
     def falhar_se_algo_falhou() -> None:
         """Deixa o run vermelho quando uma cópia falha: ``conferir`` roda
@@ -239,9 +266,10 @@ def siconfi_migracao_raw_pages_dag() -> None:
     ]
     copias.append(migrar_fila())
     conferencia = conferir()
+    completa = conversao_completa(conferencia)
     preparar() >> copias
     copias >> conferencia
-    [*copias, conferencia] >> falhar_se_algo_falhou()
+    [*copias, conferencia, completa] >> falhar_se_algo_falhou()
 
 
 siconfi_migracao_raw_pages_dag()

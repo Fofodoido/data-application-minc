@@ -28,6 +28,7 @@ from cliente_siconfi import SiconfiPage, request_hash
 from siconfi_migracao import (
     avaliar_fila,
     avaliar_tabela,
+    chaves_divergentes,
     conexao_origem,
     converter_fila,
     data_do_run,
@@ -35,6 +36,7 @@ from siconfi_migracao import (
     exigir_sem_duplicatas,
     migrar_endpoint,
     objetos_dos_runs,
+    pendencias,
     status_da_fila_antiga,
     tabela_antiga,
     unidade_e_evento,
@@ -384,3 +386,34 @@ def test_situacao_da_fila_convertida(
     resultado = avaliar_fila(_ANTIGA, convertidas, nova)
     assert resultado["situacao"] == situacao
     assert resultado["antiga"] == {"success": 3, "pending": 7}
+
+
+def test_chave_antiga_igual_ao_request_hash_de_hoje() -> None:
+    """É o que impede a ingestão nova de baixar de novo o que já foi baixado."""
+    params = {"id_ente": 1, "an_exercicio": 2025}
+    certa = {
+        "endpoint": "rreo",
+        "work_key": request_hash("rreo", params),
+        "params": params,
+    }
+    errada = {"endpoint": "rreo", "work_key": "outra-coisa", "params": params}
+    assert chaves_divergentes([certa]) == []
+    assert chaves_divergentes([certa, errada]) == ["outra-coisa"]
+
+
+def test_chave_divergente_torna_a_fila_inconsistente() -> None:
+    nova = {"success": 3, "pending": 7}
+    resultado = avaliar_fila(_ANTIGA, 10, nova, chaves_conferidas=200, divergentes=1)
+    assert resultado["situacao"] == "inconsistente"
+    assert resultado["chaves_divergentes"] == 1
+
+
+def test_pendencias_sao_so_o_que_esta_em_andamento() -> None:
+    relatorio = {
+        "raw_pages_rreo": {"situacao": "completo"},
+        "raw_pages_rgf": {"situacao": "em_andamento"},
+        "raw_pages_dca": {"situacao": "ausente"},
+        "fila": {"situacao": "em_andamento"},
+    }
+    assert pendencias(relatorio) == ["fila", "raw_pages_rgf"]
+    assert pendencias({"fila": {"situacao": "completo"}}) == []

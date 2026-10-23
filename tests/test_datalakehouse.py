@@ -255,3 +255,22 @@ def test_anexo_ja_baixado_e_reconhecido_pelo_id() -> None:
         "raw/transferegov/anexos_arquivos/lpg/README",
     ]
     assert ids_ja_baixados(keys) == {"10": keys[0], "11": keys[1]}
+
+
+def test_existe_objeto_pede_uma_chave_so() -> None:
+    """Uma pasta de run da MSC tem centenas de milhares de arquivos; para saber se
+    está vazia não se lista a pasta inteira."""
+    from unittest.mock import MagicMock, patch
+
+    import datalakehouse
+
+    s3 = MagicMock()
+    s3.list_objects_v2.side_effect = [{"KeyCount": 1}, {"KeyCount": 0}]
+    hook = MagicMock()
+    hook.get_conn.return_value = s3
+    with patch.object(datalakehouse, "get_hook", return_value=hook):
+        assert datalakehouse.existe_objeto("raw/siconfi/rreo/x/") is True
+        assert datalakehouse.existe_objeto("raw/siconfi/rgf/x/") is False
+    s3.list_objects_v2.assert_called_with(
+        Bucket=datalakehouse.BUCKET, Prefix="raw/siconfi/rgf/x/", MaxKeys=1
+    )

@@ -10,8 +10,10 @@ O que estes testes garantem:
   revisão nova põe;
 - os literais escapam aspas e os instantes saem em UTC.
 
-A semântica das consultas nativas (pendente, último estado) é conferida contra um
-Postgres de verdade no teste local de ponta a ponta.
+Estes testes olham o **texto** do SQL, com um Trino falso: não dizem se a fila
+pendente ou o estado vigente estão certos. A semântica das consultas é conferida
+executando-as num Postgres de verdade, em ``test_siconfi_controle_postgres.py``
+(roda com ``SICONFI_TEST_PG_DSN`` definida).
 """
 
 from datetime import datetime, timedelta, timezone
@@ -208,3 +210,14 @@ def test_literais_escapam_aspas_e_instantes_saem_em_utc() -> None:
     brt = datetime(2026, 10, 21, 9, 0, tzinfo=timezone(timedelta(hours=-3)))
     assert instante(brt) == "TIMESTAMP '2026-10-21 12:00:00.000000 UTC'"
     assert params_json({"b": 1, "a": 2}) == '{"a": 2, "b": 1}'
+
+
+class _TrinoSemSystemQuery(_TrinoFalso):
+    def records(self, sql: str) -> list[Sequence[Any]]:
+        raise RuntimeError("Function 'query' not registered")
+
+
+def test_conector_sem_system_query_falha_cedo_e_diz_o_que_falta() -> None:
+    controle = SiconfiControle(_TrinoSemSystemQuery(), catalog="dw", schema="control")
+    with pytest.raises(RuntimeError, match="system.query e system.execute"):
+        controle.ensure_tables()

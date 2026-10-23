@@ -343,6 +343,20 @@ def raw_para_staging(
     return key_staging
 
 
+def existe_objeto(prefixo_busca: str) -> bool:
+    """Se há ao menos um objeto sob ``prefixo_busca``, sem listar o prefixo inteiro.
+
+    Uma pasta de run da MSC pode ter centenas de milhares de páginas; para saber
+    se está vazia basta pedir uma chave.
+    """
+    resposta = (
+        get_hook()
+        .get_conn()
+        .list_objects_v2(Bucket=BUCKET, Prefix=prefixo_busca, MaxKeys=1)
+    )
+    return int(resposta.get("KeyCount", 0)) > 0
+
+
 def listar_objetos(prefixo_busca: str) -> list[dict[str, Any]]:
     """Objetos (``Key``, ``LastModified``...) sob ``prefixo_busca``."""
     paginador = get_hook().get_conn().get_paginator("list_objects_v2")
