@@ -1,441 +1,306 @@
-"""Persistência Bronze e controle retomável da ingestão SICONFI.
+"""Gravação da ingestão SICONFI no raw do datalakehouse, planejamento e ingestão.
 
-Uma tabela de páginas cruas por endpoint (``raw_pages_<endpoint>``). Os itens são
-expandidos em ``<endpoint>_items`` só onde ainda não há estruturação no dbt — ver
-``PAGES_ONLY_ENDPOINTS``."""
+Cada página que a API devolve vira um arquivo no raw do MinIO (ADR 0009)::
+
+    raw/siconfi/<entidade>/ano=AAAA/mes=MM/dia=DD/<run_id>/<request_hash>_<offset>.json
+
+O arquivo é o envelope da página -- os mesmos campos da antiga tabela de páginas
+cruas (``raw_pages_<endpoint>``) -- com o ``payload`` intacto. Não há staging: o
+ADR 0009 não tem etapa entre o raw e a bronze, e a carga na bronze
+(``siconfi.bronze_<entidade>``) lê o raw direto. Esta DAG só extrai.
+
+O controle (fila, refresh das tabelas de referência e o que o planejamento já
+leu) mora em ``siconfi_controle``, e sai pelo Trino.
+"""
 
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
+import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable, Iterator, Mapping
+from typing import Any, Iterable, Mapping, Protocol
 
-import psycopg2
-from psycopg2 import sql
-from psycopg2.extensions import cursor as Cursor
-from psycopg2.extras import execute_values
+import datalakehouse
+from cliente_siconfi import (
+    FACT_ENDPOINTS,
+    PlanScope,
+    SiconfiClient,
+    SiconfiPage,
+    SiconfiPermanentError,
+    SiconfiRetryableError,
+    planned_units,
+    request_hash,
+)
 
-from cliente_siconfi import CONTROL_SCHEMA, FACT_ENDPOINTS, SiconfiPage, request_hash
-
-BRONZE_SCHEMA = "siconfi_bronze"
-# Depois disso, uma unidade em ``running`` volta a poder ser reservada. O
-# orçamento de tempo das tasks (``max_run_minutes``) precisa ficar abaixo.
-CLAIM_LEASE_MINUTES = 60
+FONTE = "siconfi"
 VALID_ENDPOINTS = frozenset(
     {"anexos-relatorios", "entes", "extrato_entregas", *FACT_ENDPOINTS}
 )
-# Endpoints sem tabela de itens: o banco guarda só a página crua em
-# ``raw_pages_<endpoint>`` e a estruturação em colunas é feita no dbt. Uma linha
-# de item em JSONB não comprime (fica abaixo do limite do TOAST) e repete os
-# nomes de campo: a MSC orçamentária chegou a ~830 bytes por linha e 45 GB. As três
-# MSC têm as mesmas colunas e filas grandes, e a DCA (um ente por exercício, de 2013
-# em diante) também; rreo e rgf ficam com itens porque as filas deles já esvaziaram.
-PAGES_ONLY_ENDPOINTS = frozenset(
-    {"dca", "msc_patrimonial", "msc_orcamentaria", "msc_controle"}
-)
-_BRONZE = sql.Identifier(BRONZE_SCHEMA)
-_CONTROL = sql.Identifier(CONTROL_SCHEMA)
 
-_DDL = [
-    sql.SQL("CREATE SCHEMA IF NOT EXISTS {bronze}"),
-    sql.SQL("CREATE SCHEMA IF NOT EXISTS {control}"),
-    sql.SQL("""
-        CREATE TABLE IF NOT EXISTS {control}.work_queue (
-            endpoint TEXT NOT NULL,
-            work_key TEXT NOT NULL,
-            params JSONB NOT NULL,
-            revision_marker TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            attempts INTEGER NOT NULL DEFAULT 0,
-            claimed_at TIMESTAMPTZ,
-            claimed_by TEXT,
-            next_attempt_at TIMESTAMPTZ,
-            last_error TEXT,
-            last_success_at TIMESTAMPTZ,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            PRIMARY KEY (endpoint, work_key)
-        )
-        """),
-    sql.SQL(
-        "CREATE INDEX IF NOT EXISTS work_queue_claim_idx "
-        "ON {control}.work_queue (endpoint, status, updated_at)"
-    ),
-    sql.SQL("""
-        CREATE TABLE IF NOT EXISTS {control}.plan_state (
-            source TEXT PRIMARY KEY,
-            last_item_id BIGINT NOT NULL,
-            scope_hash TEXT NOT NULL,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """),
-    sql.SQL("""
-        CREATE TABLE IF NOT EXISTS {control}.reference_state (
-            endpoint TEXT PRIMARY KEY,
-            refreshed_at TIMESTAMPTZ NOT NULL
-        )
-        """),
-]
-_PAGES_DDL = sql.SQL("""
-    CREATE TABLE IF NOT EXISTS {bronze}.{table} (
-        raw_page_id BIGSERIAL PRIMARY KEY,
-        endpoint TEXT NOT NULL,
-        request_hash TEXT NOT NULL,
-        request_params JSONB NOT NULL,
-        page_offset INTEGER NOT NULL,
-        fetched_at TIMESTAMPTZ NOT NULL,
-        run_id TEXT NOT NULL,
-        response_headers JSONB NOT NULL,
-        payload JSONB NOT NULL,
-        item_count INTEGER NOT NULL
+
+# ── raw ──────────────────────────────────────────────────────────────────
+
+
+def entidade(endpoint: str) -> str:
+    """Nome da entidade no datalakehouse e na bronze: o endpoint, com ``_``."""
+    if endpoint not in VALID_ENDPOINTS:
+        raise ValueError(f"endpoint SICONFI inválido: {endpoint}")
+    return endpoint.replace("-", "_")
+
+
+def envelope_da_pagina(
+    page: SiconfiPage, run_id: str, fetched_at: datetime
+) -> dict[str, Any]:
+    """O que vai para o raw: a resposta e de qual requisição ela veio."""
+    return {
+        "endpoint": page.endpoint,
+        "request_hash": request_hash(page.endpoint, page.params),
+        "request_params": page.params,
+        "page_offset": page.offset,
+        "fetched_at": fetched_at.astimezone(timezone.utc).isoformat(),
+        "run_id": run_id,
+        "response_headers": page.headers,
+        "payload": page.payload,
+        "item_count": len(page.items),
+    }
+
+
+def key_raw_do_envelope(envelope: Mapping[str, Any], data: datetime) -> str:
+    """Key do raw: a pasta do run e, dentro dela, a requisição e o deslocamento.
+
+    Determinística de propósito: a mesma página regravada no mesmo run (retry
+    da task, ou a conversão das páginas antigas rodada de novo) cai na mesma
+    key, em vez de duplicar. É a única sobrescrita que o raw admite, e só com o
+    mesmo conteúdo: uma página antiga não tem duas versões no mesmo run.
+    """
+    return datalakehouse.caminho_no_run(
+        datalakehouse.CAMADA_RAW,
+        FONTE,
+        entidade(envelope["endpoint"]),
+        envelope["run_id"],
+        data,
+        f"{envelope['request_hash']}_{envelope['page_offset']}",
     )
-    """)
-_ITEMS_DDL = sql.SQL("""
-    CREATE TABLE IF NOT EXISTS {bronze}.{table} (
-        bronze_item_id BIGSERIAL PRIMARY KEY,
-        raw_page_id BIGINT NOT NULL REFERENCES {bronze}.{pages}(raw_page_id),
-        dt_ingest TIMESTAMPTZ NOT NULL,
-        run_id TEXT NOT NULL,
-        request_hash TEXT NOT NULL,
-        source_page_offset INTEGER NOT NULL,
-        payload JSONB NOT NULL
+
+
+def gravar_envelope(envelope: Mapping[str, Any], data: datetime) -> str:
+    """Grava o envelope no raw e devolve a key.
+
+    É a única porta de escrita: a DAG de ingestão e a conversão das páginas
+    antigas passam por aqui, então as duas produzem o mesmo caminho e formato.
+    """
+    key_raw = key_raw_do_envelope(envelope, data)
+    datalakehouse.gravar_bytes(
+        json.dumps(envelope, ensure_ascii=False, default=str).encode("utf-8"), key_raw
     )
-    """)
-_UPSERT_WORK = sql.SQL("""
-    INSERT INTO {control}.work_queue (endpoint, work_key, params, revision_marker)
-    VALUES %s
-    ON CONFLICT (endpoint, work_key) DO UPDATE SET
-        params = EXCLUDED.params,
-        status = CASE
-            WHEN {control}.work_queue.revision_marker
-                 IS DISTINCT FROM EXCLUDED.revision_marker
-            THEN 'pending' ELSE {control}.work_queue.status END,
-        revision_marker = EXCLUDED.revision_marker,
-        updated_at = now()
-    RETURNING (xmax = 0) AS inserted
-    """).format(control=_CONTROL)
+    return key_raw
 
 
-class SiconfiStorage:
-    def __init__(self, conn_str: str) -> None:
-        self.conn_str = conn_str
+def persist_page(
+    page: SiconfiPage,
+    run_id: str,
+    data: datetime,
+    fetched_at: datetime | None = None,
+) -> int:
+    """Grava a página no raw; devolve quantos itens ela tinha.
 
-    @contextmanager
-    def _cursor(self) -> Iterator[Cursor]:
-        """Cursor numa conexão própria: commit ao sair sem erro, e sempre fecha.
+    ``data`` é a data do run, não a da coleta: todas as páginas de um run ficam
+    na mesma pasta, que é o que a carga da bronze lê.
+    """
+    envelope = envelope_da_pagina(page, run_id, fetched_at or datetime.now(timezone.utc))
+    gravar_envelope(envelope, data)
+    return len(page.items)
 
-        ``with psycopg2.connect()`` sozinho só encerra a transação — não fecha
-        a conexão.
-        """
-        conn = psycopg2.connect(self.conn_str)
-        try:
-            with conn, conn.cursor() as cur:
-                yield cur
-        finally:
-            conn.close()
 
-    @staticmethod
-    def _validate(endpoint: str) -> None:
-        if endpoint not in VALID_ENDPOINTS:
-            raise ValueError(f"endpoint SICONFI inválido: {endpoint}")
+def prefixo_raw_do_run(endpoint: str, run_id: str, data: datetime) -> str:
+    return datalakehouse.prefixo_do_run(
+        datalakehouse.CAMADA_RAW, FONTE, entidade(endpoint), run_id, data
+    )
 
-    @classmethod
-    def _pages_table(cls, endpoint: str) -> str:
-        cls._validate(endpoint)
-        return f"raw_pages_{endpoint.replace('-', '_')}"
 
-    @classmethod
-    def _table(cls, endpoint: str) -> str:
-        cls._validate(endpoint)
-        if endpoint in PAGES_ONLY_ENDPOINTS:
-            raise ValueError(f"{endpoint} não tem tabela de itens; leia as páginas")
-        return f"{endpoint.replace('-', '_')}_items"
+def raw_keys(endpoint: str, prefixo: str | None = None) -> list[str]:
+    """Keys dos JSON de raw de ``endpoint`` (ou só sob ``prefixo``), em ordem."""
+    busca = prefixo or datalakehouse.prefixo(
+        datalakehouse.CAMADA_RAW, FONTE, entidade(endpoint)
+    )
+    return sorted(
+        objeto["Key"]
+        for objeto in datalakehouse.listar_objetos(busca)
+        if objeto["Key"].endswith(".json")
+    )
 
-    def ensure_tables(self) -> None:
-        with self._cursor() as cur:
-            for statement in _DDL:
-                cur.execute(statement.format(bronze=_BRONZE, control=_CONTROL))
-            for endpoint in sorted(VALID_ENDPOINTS):
-                pages = sql.Identifier(self._pages_table(endpoint))
-                cur.execute(_PAGES_DDL.format(bronze=_BRONZE, table=pages))
-                if endpoint in PAGES_ONLY_ENDPOINTS:
-                    continue
-                cur.execute(
-                    _ITEMS_DDL.format(
-                        bronze=_BRONZE,
-                        table=sql.Identifier(self._table(endpoint)),
-                        pages=pages,
-                    )
-                )
 
-    def reference_due(self, endpoint: str, refresh_hours: int) -> bool:
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL(
-                    "SELECT refreshed_at FROM {}.reference_state WHERE endpoint = %s"
-                ).format(_CONTROL),
-                (endpoint,),
-            )
-            row = cur.fetchone()
-        return row is None or row[0] <= datetime.now(timezone.utc) - timedelta(
-            hours=refresh_hours
-        )
+def itens_do_raw(key: str) -> list[dict[str, Any]]:
+    """Itens de uma página do raw, com os tipos que a API mandou."""
+    items = datalakehouse.ler_json(key)["payload"].get("items", [])
+    return [item for item in items if isinstance(item, dict)]
 
-    def mark_reference_refreshed(self, endpoint: str) -> None:
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL(
-                    "INSERT INTO {}.reference_state (endpoint, refreshed_at) "
-                    "VALUES (%s, now()) ON CONFLICT (endpoint) DO UPDATE "
-                    "SET refreshed_at = EXCLUDED.refreshed_at"
-                ).format(_CONTROL),
-                (endpoint,),
-            )
 
-    def persist_page(self, page: SiconfiPage, run_id: str) -> int:
-        now = datetime.now(timezone.utc)
-        query_hash = request_hash(page.endpoint, page.params)
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL("""
-                    INSERT INTO {}.{}
-                      (endpoint, request_hash, request_params, page_offset, fetched_at,
-                       run_id, response_headers, payload, item_count)
-                    VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
-                    RETURNING raw_page_id
-                    """).format(
-                    _BRONZE, sql.Identifier(self._pages_table(page.endpoint))
-                ),
-                (
-                    page.endpoint,
-                    query_hash,
-                    json.dumps(page.params, default=str),
-                    page.offset,
-                    now,
-                    run_id,
-                    json.dumps(page.headers),
-                    json.dumps(page.payload, default=str),
-                    len(page.items),
-                ),
-            )
-            row = cur.fetchone()
-            assert row is not None  # RETURNING sempre devolve a linha inserida
-            raw_page_id = row[0]
-            if page.items and page.endpoint not in PAGES_ONLY_ENDPOINTS:
-                # execute_values manda a página em poucos comandos; o
-                # executemany do psycopg2 faz uma ida ao banco por item.
-                execute_values(
-                    cur,
-                    sql.SQL(
-                        "INSERT INTO {}.{} (raw_page_id, dt_ingest, run_id, "
-                        "request_hash, source_page_offset, payload) VALUES %s"
-                    )
-                    .format(_BRONZE, sql.Identifier(self._table(page.endpoint)))
-                    .as_string(cur),
-                    [
-                        (
-                            raw_page_id,
-                            now,
-                            run_id,
-                            query_hash,
-                            page.offset,
-                            json.dumps(item, default=str),
-                        )
-                        for item in page.items
-                    ],
-                    template="(%s, %s, %s, %s, %s, %s::jsonb)",
-                    page_size=1000,
-                )
-        return len(page.items)
+def entity_ids_do_raw(prefixo: str | None) -> list[int]:
+    """Códigos IBGE dos entes no raw de ``/entes`` sob ``prefixo``."""
+    if not prefixo:
+        return []
+    ids = {
+        int(item["cod_ibge"])
+        for key in raw_keys("entes", prefixo)
+        for item in itens_do_raw(key)
+        if item.get("cod_ibge") is not None
+    }
+    return sorted(ids)
+
+
+# ── planejamento ─────────────────────────────────────────────────────────
+
+
+def _acumular(
+    items: list[dict[str, Any]],
+    scope: PlanScope,
+    buffers: dict[str, list[tuple[dict[str, Any], str | None]]],
+) -> None:
+    for item in items:
+        for endpoint, params, revision in planned_units(item, scope):
+            buffers[endpoint].append((params, revision))
+
+
+class _ControlePlanejamento(Protocol):
+    def planned_keys(self, source: str, scope_hash: str) -> set[str]: ...
+
+    def mark_planned(self, source: str, scope_hash: str, keys: list[str]) -> None: ...
 
     def enqueue_many(
-        self,
-        endpoint: str,
-        units: Iterable[tuple[dict[str, Any], str | None]],
-        chunk_size: int = 1000,
-    ) -> int:
-        """Insere/atualiza várias unidades de trabalho numa única conexão.
+        self, endpoint: str, units: list[tuple[dict[str, Any], str | None]]
+    ) -> int: ...
 
-        O planejamento produz dezenas de milhares de unidades por execução; uma
-        conexão por unidade tornava ``plan_facts`` impraticável contra um
-        Postgres remoto. As chaves são deduplicadas porque ``ON CONFLICT DO
-        UPDATE`` recusa afetar a mesma linha duas vezes no mesmo comando.
-        """
-        self._validate(endpoint)
-        deduped: dict[str, tuple[str, str, str | None]] = {}
-        for params, revision_marker in units:
-            key = request_hash(endpoint, params)
-            deduped[key] = (key, json.dumps(params, default=str), revision_marker)
-        if not deduped:
-            return 0
 
-        rows = [(endpoint, *unit) for unit in deduped.values()]
-        inserted = 0
-        with self._cursor() as cur:
-            query = _UPSERT_WORK.as_string(cur)
-            for start in range(0, len(rows), chunk_size):
-                returned = execute_values(
-                    cur,
-                    query,
-                    rows[start : start + chunk_size],
-                    template="(%s, %s, %s::jsonb, %s)",
-                    page_size=chunk_size,
-                    fetch=True,
-                )
-                inserted += sum(1 for (is_new,) in returned if is_new)
-        return inserted
+def plan_from_extrato(
+    controle: _ControlePlanejamento,
+    scope: PlanScope,
+    budget: int,
+    flush_size: int = 5000,
+) -> dict[str, int]:
+    """Enfileira as unidades dos arquivos do extrato ainda não planejados.
 
-    def claim(
+    Lê o raw: o marcador de revisão é ``str()`` de campos do item, e com tudo
+    virando texto ele mudaria e reabriria unidades concluídas. Cada arquivo é
+    planejado uma vez por recorte; mudar o recorte relê tudo. ``budget`` limita
+    os itens lidos por execução, sempre em arquivos inteiros.
+
+    As unidades e os arquivos lidos vão para o controle em lote, a cada
+    ``flush_size`` unidades acumuladas e no fim, e não arquivo por arquivo.
+    """
+    fingerprint = scope.fingerprint()
+    done = controle.planned_keys("extrato_entregas", fingerprint)
+    created = {endpoint: 0 for endpoint in FACT_ENDPOINTS}
+    buffers: dict[str, list[tuple[dict[str, Any], str | None]]] = {
+        endpoint: [] for endpoint in FACT_ENDPOINTS
+    }
+    lidos: list[str] = []
+
+    def flush() -> None:
+        for endpoint in FACT_ENDPOINTS:
+            if buffers[endpoint]:
+                created[endpoint] += controle.enqueue_many(endpoint, buffers[endpoint])
+                buffers[endpoint] = []
+        # Só depois de enfileirar: se a task cair no meio, os arquivos são
+        # relidos, e reenfileirar a mesma unidade não muda nada.
+        if lidos:
+            controle.mark_planned("extrato_entregas", fingerprint, list(lidos))
+            lidos.clear()
+
+    read = 0
+    for key in raw_keys("extrato_entregas"):
+        if read >= budget:
+            break
+        if key in done:
+            continue
+        items = itens_do_raw(key)
+        _acumular(items, scope, buffers)
+        lidos.append(key)
+        read += len(items)
+        if sum(len(b) for b in buffers.values()) >= flush_size:
+            flush()
+    flush()
+    return created
+
+
+# ── ingestão ─────────────────────────────────────────────────────────────
+
+
+class _ControleFila(Protocol):
+    def pending(
         self,
         endpoint: str,
         limit: int,
-        worker_id: str,
-        lease_minutes: int = CLAIM_LEASE_MINUTES,
         param_filter: Mapping[str, Iterable[Any]] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Reserva até ``limit`` unidades cujos ``params`` caibam em ``param_filter``."""
-        self._validate(endpoint)
-        filters = sorted((param_filter or {}).items())
-        filter_sql = sql.SQL("").join(
-            sql.SQL(" AND (params->>{}) = ANY(%s)").format(sql.Literal(key))
-            for key, _ in filters
-        )
-        filter_values = [sorted(str(v) for v in values) for _, values in filters]
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL("""
-                    WITH candidates AS (
-                        SELECT endpoint, work_key
-                        FROM {control}.work_queue
-                        WHERE endpoint = %s AND (
-                            status IN ('pending', 'retry')
-                            OR (status = 'running'
-                                AND claimed_at < now() - (%s * interval '1 minute'))
-                        )
-                        AND (next_attempt_at IS NULL OR next_attempt_at <= now())
-                        {filters}
-                        ORDER BY updated_at, work_key
-                        FOR UPDATE SKIP LOCKED
-                        LIMIT %s
-                    )
-                    UPDATE {control}.work_queue q
-                    SET status = 'running', attempts = q.attempts + 1,
-                        claimed_at = now(), claimed_by = %s, updated_at = now()
-                    FROM candidates c
-                    WHERE q.endpoint = c.endpoint AND q.work_key = c.work_key
-                    RETURNING q.work_key, q.params, q.attempts
-                    """).format(control=_CONTROL, filters=filter_sql),
-                (endpoint, lease_minutes, *filter_values, limit, worker_id),
-            )
-            return [
-                {"work_key": key, "params": params, "attempts": attempts}
-                for key, params, attempts in cur.fetchall()
-            ]
+    ) -> list[dict[str, Any]]: ...
 
-    def release(self, endpoint: str, work_keys: list[str], worker_id: str) -> None:
-        """Devolve à fila unidades reservadas e não processadas.
+    def record_events(
+        self, endpoint: str, events: list[Mapping[str, Any]], run_id: str
+    ) -> None: ...
 
-        Sem isso, uma task que para no meio — por tempo ou por erro — deixa as
-        unidades em ``running`` até o lease vencer, e a nova tentativa do
-        Airflow não encontra nada para fazer.
-        """
-        if not work_keys:
-            return
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL("""
-                    UPDATE {}.work_queue
-                    SET status = 'pending', claimed_at = NULL, claimed_by = NULL
-                    WHERE endpoint = %s AND work_key = ANY(%s)
-                      AND status = 'running' AND claimed_by = %s
-                    """).format(_CONTROL),
-                (endpoint, work_keys, worker_id),
-            )
 
-    def complete(
-        self,
-        endpoint: str,
-        work_key: str,
-        status: str,
-        error: str | None = None,
-        retry_delay_s: int = 300,
-    ) -> None:
-        if status not in {"success", "no_data", "permanent_error", "retry"}:
-            raise ValueError(f"status inválido: {status}")
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL("""
-                    UPDATE {}.work_queue
-                    SET status = %(status)s, last_error = %(error)s,
-                        next_attempt_at = CASE WHEN %(status)s = 'retry'
-                            THEN now() + (%(retry_delay_s)s * interval '1 second')
-                            ELSE NULL END,
-                        last_success_at = CASE
-                            WHEN %(status)s IN ('success', 'no_data') THEN now()
-                            ELSE last_success_at END,
-                        updated_at = now()
-                    WHERE endpoint = %(endpoint)s AND work_key = %(work_key)s
-                    """).format(_CONTROL),
+def ingerir_endpoint(
+    endpoint: str,
+    controle: _ControleFila,
+    client: SiconfiClient,
+    scope: PlanScope,
+    run_id: str,
+    data: datetime,
+    limite: int,
+    prazo_s: float,
+    retry_delay_s: int = 300,
+    eventos_por_gravacao: int = 25,
+) -> dict[str, int]:
+    """Busca as unidades pendentes de ``endpoint`` e grava as páginas no raw.
+
+    Para quando acabam as pendentes, depois de ``limite`` unidades ou quando o
+    prazo se esgota. O resultado de cada unidade vai para o controle a cada
+    ``eventos_por_gravacao`` unidades e no fim, inclusive se der erro no meio:
+    uma unidade sem evento continua pendente e é refeita no próximo run.
+    """
+    summary = dict.fromkeys(
+        ("pending", "success", "no_data", "retry", "permanent_error", "rows"), 0
+    )
+    if not scope.enabled(endpoint):
+        return summary
+    unidades = controle.pending(endpoint, limite, scope.constraints(endpoint))
+    summary["pending"] = len(unidades)
+    deadline = time.monotonic() + prazo_s
+    eventos: list[Mapping[str, Any]] = []
+    try:
+        for unit in unidades:
+            if time.monotonic() >= deadline:
+                break
+            next_attempt_at = None
+            try:
+                rows = sum(
+                    persist_page(page, run_id, data)
+                    for page in client.iter_pages(endpoint, unit["params"])
+                )
+                status, error = ("success" if rows else "no_data"), None
+                summary["rows"] += rows
+            except SiconfiRetryableError as exc:
+                status, error = "retry", str(exc)
+                next_attempt_at = datetime.now(timezone.utc) + timedelta(
+                    seconds=retry_delay_s
+                )
+            except SiconfiPermanentError as exc:
+                status = "no_data" if exc.status_code == 404 else "permanent_error"
+                error = str(exc)
+            eventos.append(
                 {
+                    "work_key": unit["work_key"],
+                    "revision_marker": unit.get("revision_marker"),
                     "status": status,
-                    "error": error[:2000] if error else None,
-                    "retry_delay_s": retry_delay_s,
-                    "endpoint": endpoint,
-                    "work_key": work_key,
-                },
+                    "error": error,
+                    "next_attempt_at": next_attempt_at,
+                }
             )
-
-    def entity_ids(self) -> list[int]:
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL(
-                    "SELECT DISTINCT (payload->>'cod_ibge')::bigint FROM {}.{} "
-                    "WHERE payload ? 'cod_ibge'"
-                ).format(_BRONZE, sql.Identifier(self._table("entes")))
-            )
-            return [int(row[0]) for row in cur.fetchall()]
-
-    def payloads_since(
-        self, endpoint: str, after_id: int, limit: int
-    ) -> list[tuple[int, dict[str, Any]]]:
-        """Itens de ``endpoint`` com ``bronze_item_id > after_id``, em ordem."""
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL(
-                    "SELECT bronze_item_id, payload FROM {}.{} "
-                    "WHERE bronze_item_id > %s ORDER BY bronze_item_id LIMIT %s"
-                ).format(_BRONZE, sql.Identifier(self._table(endpoint))),
-                (after_id, limit),
-            )
-            return [
-                (item_id, payload)
-                for item_id, payload in cur.fetchall()
-                if isinstance(payload, dict)
-            ]
-
-    def plan_watermark(self, source: str, scope_hash: str) -> int:
-        """Último item de ``source`` já planejado com este recorte; 0 se mudou."""
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL(
-                    "SELECT last_item_id, scope_hash FROM {}.plan_state "
-                    "WHERE source = %s"
-                ).format(_CONTROL),
-                (source,),
-            )
-            row = cur.fetchone()
-        return int(row[0]) if row and row[1] == scope_hash else 0
-
-    def save_plan_watermark(
-        self, source: str, last_item_id: int, scope_hash: str
-    ) -> None:
-        with self._cursor() as cur:
-            cur.execute(
-                sql.SQL(
-                    "INSERT INTO {}.plan_state (source, last_item_id, scope_hash) "
-                    "VALUES (%s, %s, %s) ON CONFLICT (source) DO UPDATE SET "
-                    "last_item_id = EXCLUDED.last_item_id, "
-                    "scope_hash = EXCLUDED.scope_hash, updated_at = now()"
-                ).format(_CONTROL),
-                (source, last_item_id, scope_hash),
-            )
+            summary[status] += 1
+            if len(eventos) >= eventos_por_gravacao:
+                controle.record_events(endpoint, eventos, run_id)
+                eventos = []
+    finally:
+        if eventos:
+            controle.record_events(endpoint, eventos, run_id)
+    return summary

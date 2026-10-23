@@ -19,6 +19,12 @@ publica um evento com a key exata do arquivo no ``extra``, e quem consome lê
 essa key do evento que o disparou. O ``extra`` carrega a *cadeia* inteira
 (``entidade -> key``) desde o programa, para que um consumidor que precise de
 várias entidades -- anexos, relatórios e planos -- leia todas do mesmo run.
+
+Fonte que grava muitos arquivos por run (SICONFI: um por página da API) usa
+``prefixo_do_run``/``caminho_no_run`` e publica no ``extra`` a **pasta** do run,
+não a key de um arquivo: quem consome lista a pasta. E cada pasta só tem o que
+aquele run processou, então o consumidor precisa ler todos os eventos recebidos
+(``eventos_em_ordem``), não só o mais novo.
 """
 
 from __future__ import annotations
@@ -91,6 +97,31 @@ def caminho_particionado(
     return (
         f"{prefixo(camada, fonte, entidade)}{particoes}"
         f"{sanitizar_run_id(run_id)}.{extensao}"
+    )
+
+
+def prefixo_do_run(
+    camada: str, fonte: str, entidade: str, run_id: str, data: datetime
+) -> str:
+    """Pasta de um run que grava muitos arquivos da mesma entidade.
+
+    O ``caminho`` dá um arquivo por run; uma fonte paginada (SICONFI) grava
+    milhares de páginas por run, e cada uma vira um arquivo dentro desta pasta.
+    Quem consome o run lê a pasta inteira -- nunca "o arquivo mais recente".
+    """
+    return (
+        f"{prefixo(camada, fonte, entidade)}"
+        f"ano={data:%Y}/mes={data:%m}/dia={data:%d}/{sanitizar_run_id(run_id)}/"
+    )
+
+
+def caminho_no_run(
+    camada: str, fonte: str, entidade: str, run_id: str, data: datetime, nome: str
+) -> str:
+    """Key de um arquivo ``nome`` dentro da pasta do run (ver ``prefixo_do_run``)."""
+    return (
+        f"{prefixo_do_run(camada, fonte, entidade, run_id, data)}"
+        f"{sanitizar_run_id(nome)}.{_EXTENSAO[camada]}"
     )
 
 
@@ -241,7 +272,7 @@ def get_hook() -> S3Hook:
     return hook
 
 
-def _run_atual() -> tuple[str, datetime]:
+def run_atual() -> tuple[str, datetime]:
     """``run_id`` e data de partição da execução corrente.
 
     Em run manual no Airflow 3 o ``logical_date`` pode vir vazio; aí vale o
@@ -261,7 +292,7 @@ def gravar_raw(registros: list[dict[str, Any]], fonte: str, entidade: str) -> st
     Só a key deve trafegar por XCom -- a lista inteira estoura o IPC do
     Airflow 3 com alguns milhares de registros.
     """
-    run_id, data = _run_atual()
+    run_id, data = run_atual()
     key = caminho(CAMADA_RAW, fonte, entidade, run_id, data)
     get_hook().load_string(
         string_data=json.dumps(registros, ensure_ascii=False, default=str),
@@ -276,6 +307,11 @@ def gravar_raw(registros: list[dict[str, Any]], fonte: str, entidade: str) -> st
         key,
     )
     return key
+
+
+def ler_json(key: str) -> Any:
+    """Conteúdo de um JSON do bucket, com os tipos como foram gravados."""
+    return json.loads(get_hook().read_key(key=key, bucket_name=BUCKET))
 
 
 def ler_raw(key: str) -> list[dict[str, Any]]:
@@ -305,6 +341,20 @@ def raw_para_staging(
         key_staging,
     )
     return key_staging
+
+
+def existe_objeto(prefixo_busca: str) -> bool:
+    """Se há ao menos um objeto sob ``prefixo_busca``, sem listar o prefixo inteiro.
+
+    Uma pasta de run da MSC pode ter centenas de milhares de páginas; para saber
+    se está vazia basta pedir uma chave.
+    """
+    resposta = (
+        get_hook()
+        .get_conn()
+        .list_objects_v2(Bucket=BUCKET, Prefix=prefixo_busca, MaxKeys=1)
+    )
+    return int(resposta.get("KeyCount", 0)) > 0
 
 
 def listar_objetos(prefixo_busca: str) -> list[dict[str, Any]]:

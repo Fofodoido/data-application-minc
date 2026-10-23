@@ -21,6 +21,7 @@ que a substitui, e o antigo passa a `Status: substituído por ADR NNNN`.
 | [0010](0010-camadas-e-schemas-do-data-lakehouse.md) | Cinco camadas, schema por fonte até a Intermediate e um schema por produto na Gold |
 | [0011](0011-transferegov-grava-no-datalakehouse.md) | A ingestão do TransfereGov grava no datalakehouse, e uma ponte devolve ao Postgres |
 | [0012](0012-fontes-estaticas-no-schema-seeds.md) | Fonte estática vai de raw a Parquet no MinIO e chega ao Postgres no schema `seeds` |
+| [0014](0014-siconfi-grava-so-o-raw-e-controla-pelo-trino.md) | A ingestão do SICONFI grava só o raw no MinIO e controla a fila pelo Trino |
 
 Para escrever um novo, existe a skill
 [`architecture-decision-records`](../../.claude/skills/architecture-decision-records/).
