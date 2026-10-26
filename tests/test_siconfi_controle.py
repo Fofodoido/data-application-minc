@@ -142,6 +142,25 @@ def test_replanejar_com_a_mesma_revisao_nao_volta_para_a_fila() -> None:
     assert request_hash("rreo", inedita) in insert
 
 
+def test_planejamento_le_o_endpoint_uma_vez_e_lembra_o_que_inseriu() -> None:
+    """Sem índice, cada leitura varre a tabela: uma por endpoint, não por lote."""
+    controle, trino = _controle([[]])
+    unidades = [({"id_ente": e}, "r") for e in range(1200)]
+    assert controle.enqueue_many("rreo", unidades) == 1200
+    assert controle.enqueue_many("rreo", unidades) == 0
+    assert controle.enqueue_many("rreo", [({"id_ente": 1}, "r2")]) == 1
+    (leitura,) = trino.lidos
+    assert "endpoint = 'rreo'" in leitura and " IN " not in leitura
+    assert len(trino.executados) == 4  # 3 INSERTs de 500 no 1º lote, 1 no último
+
+
+def test_recorte_vazio_devolve_fila_vazia_sem_consultar() -> None:
+    """``"msc_months": []`` na Variable viraria ``IN ()``, erro no Trino."""
+    controle, trino = _controle()
+    assert controle.pending("msc_orcamentaria", 10, {"me_referencia": []}) == []
+    assert trino.lidos == []
+
+
 def test_nada_novo_nao_executa_insert() -> None:
     controle, trino = _controle([[(request_hash("rreo", {"id_ente": 1}), "r")]])
     assert controle.enqueue_many("rreo", [({"id_ente": 1}, "r")]) == 0

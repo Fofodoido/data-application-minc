@@ -176,6 +176,16 @@ def test_revisao_nula_fecha_com_evento_de_revisao_nula(
     assert _pendentes(controle) == []
 
 
+def test_outra_task_le_do_banco_o_que_ja_foi_planejado(
+    controle: SiconfiControle,
+) -> None:
+    """Cada task cria o seu controle: o que outra planejou vem da tabela."""
+    controle.enqueue_many("rreo", [(_p(1), "r1"), (_p(2), None)])
+    outra = SiconfiControle(controle.executor, controle.catalog, controle.schema)
+    assert outra.enqueue_many("rreo", [(_p(1), "r1"), (_p(2), None)]) == 0
+    assert outra.enqueue_many("rreo", [(_p(1), "r2"), (_p(3), None)]) == 2
+
+
 def test_replanejar_revisao_nula_nao_duplica(controle: SiconfiControle) -> None:
     assert controle.enqueue_many("rreo", [(_p(1), None)]) == 1
     assert controle.enqueue_many("rreo", [(_p(1), None)]) == 0

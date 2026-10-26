@@ -68,9 +68,13 @@ endpoint e por chave desce ao Postgres. A primeira versão usava a table functio
 Serpro, então o controle não depende delas.
 
 Sem `system.execute`, a DAG não cria índice. Medido em 26/10/2026 com 397 mil
-unidades, sem índice: a fila pendente da MSC sai em 1,5 a 2,7 s, a contagem por
-estado em 2,5 s e a busca de um lote de 500 chaves no planejamento em 1,4 s. A
-contagem por estado deu o mesmo resultado da consulta com `DISTINCT ON`. Se a
+unidades, sem índice: a fila pendente da MSC sai em 1,5 a 2,7 s e a contagem por
+estado em 2,5 s. A contagem por estado deu o mesmo resultado da consulta com
+`DISTINCT ON`. O planejamento lê a revisão vigente de todas as chaves do
+endpoint numa varredura só, uma vez por task, e compara em Python: 0,3 s no
+extrato (5,6 mil chaves), 2 s na MSC orçamentária (94 mil) e 6,5 s na
+patrimonial (189 mil). Consultar por lote de 500 chaves custava 1,4 s por lote,
+e o planejamento reenfileira todos os entes × anos a cada run. Se a
 fila ficar lenta, quem administra o banco pode criar os índices, uma vez:
 
 ```sql

@@ -24,7 +24,7 @@ Todo o SQL é do Trino. A table function ``system.query`` e a procedure
 ``system.execute`` do conector, que mandariam SQL nativo ao Postgres, ficam de
 fora: o Trino do servidor nega as duas ao usuário do Airflow (``Access Denied``,
 26/10/2026). A versão vigente de cada unidade e o último evento de cada revisão
-saem de ``row_number()`` e ``max_by``, calculados no Trino; o filtro por endpoint
+saem de ``row_number()``, calculado no Trino; o filtro por endpoint
 e por chave desce ao Postgres. Pelo mesmo motivo a DAG não cria índice: o ADR
 0014 traz o ``CREATE INDEX`` para quem administra o banco, se a fila ficar lenta.
 """
@@ -32,11 +32,14 @@ e por chave desce ao Postgres. Pelo mesmo motivo a DAG não cria índice: o ADR
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from cliente_siconfi import request_hash
 from trino_bronze import quote_ident, sql_literal
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CATALOG = "dw"
 DEFAULT_SCHEMA = "control"
@@ -158,6 +161,9 @@ class SiconfiControle:
         self.executor = executor
         self.catalog = catalog
         self.schema = schema
+        # Revisão vigente de cada chave, por endpoint: lida uma vez por instância
+        # (uma por task) e atualizada a cada inserção do ``enqueue_many``.
+        self._revisoes: dict[str, dict[str, str | None]] = {}
 
     def _t(self, tabela: str) -> str:
         return f"{quote_ident(self.catalog)}.{quote_ident(self.schema)}.{tabela}"
@@ -199,6 +205,9 @@ class SiconfiControle:
                 f"{TARGET_CATALOG_VAR}: ela deve ter o nome do catálogo do banco "
                 f"no Trino deste ambiente. Erro original: {exc}"
             ) from exc
+        # O padrão ``dw`` é o nome local: se um dia existir um ``dw`` no servidor,
+        # é por esta linha do log que se vê onde o controle está gravando.
+        logger.info("[siconfi] controle em %s.%s", self.catalog, self.schema)
 
     def ensure_tables(self) -> None:
         self.verificar_catalogo()
@@ -211,6 +220,26 @@ class SiconfiControle:
 
     # ── fila ─────────────────────────────────────────────────────────────
 
+    def _revisoes_vigentes(self, endpoint: str) -> dict[str, str | None]:
+        """Chave → revisão vigente das unidades de ``endpoint``.
+
+        Uma varredura do endpoint em vez de uma consulta por lote de chaves: sem
+        índice (a DAG não cria), cada consulta varreria a tabela no Postgres, e o
+        planejamento reenfileira todos os entes × anos a cada run.
+        """
+        if endpoint not in self._revisoes:
+            self._revisoes[endpoint] = {
+                str(row[0]): row[1]
+                for row in self.executor.records(
+                    self._vigentes(
+                        f"endpoint = {sql_literal(endpoint)}",
+                        "work_key, revision_marker",
+                        "work_key",
+                    )
+                )
+            }
+        return self._revisoes[endpoint]
+
     def enqueue_many(
         self, endpoint: str, units: Iterable[tuple[dict[str, Any], str | None]]
     ) -> int:
@@ -222,36 +251,24 @@ class SiconfiControle:
         planejadas: dict[str, tuple[str, str | None]] = {}
         for params, revision in units:
             planejadas[request_hash(endpoint, params)] = (params_json(params), revision)
-        agora = datetime.now(timezone.utc)
-        chaves = list(planejadas)
-        entraram = 0
-        for inicio in range(0, len(chaves), _CHUNK):
-            lote = chaves[inicio : inicio + _CHUNK]
-            vigentes = {
-                row[0]: row[1]
-                for row in self.executor.records(
-                    self._vigentes(
-                        f"endpoint = {sql_literal(endpoint)} "
-                        f"AND work_key IN {_lista(lote)}",
-                        "work_key, revision_marker",
-                        "work_key",
-                    )
-                )
-            }
-            novas = [
-                k for k in lote if k not in vigentes or vigentes[k] != planejadas[k][1]
-            ]
-            self._insert(
-                UNITS,
-                "endpoint, work_key, params, revision_marker, planned_at",
-                [
-                    f"({texto(endpoint)}, {texto(k)}, {texto(planejadas[k][0])}, "
-                    f"{texto(planejadas[k][1])}, {instante(agora)})"
-                    for k in novas
-                ],
-            )
-            entraram += len(novas)
-        return entraram
+        vigentes = self._revisoes_vigentes(endpoint)
+        novas = [
+            k
+            for k, (_, revisao) in planejadas.items()
+            if k not in vigentes or vigentes[k] != revisao
+        ]
+        agora = instante(datetime.now(timezone.utc))
+        self._insert(
+            UNITS,
+            "endpoint, work_key, params, revision_marker, planned_at",
+            [
+                f"({texto(endpoint)}, {texto(k)}, {texto(planejadas[k][0])}, "
+                f"{texto(planejadas[k][1])}, {agora})"
+                for k in novas
+            ],
+        )
+        vigentes.update((k, planejadas[k][1]) for k in novas)
+        return len(novas)
 
     def pending(
         self,
@@ -263,10 +280,18 @@ class SiconfiControle:
 
         ``retry`` volta a ser pendente depois de ``next_attempt_at``.
         """
+        permitidos = {
+            chave: sorted(str(v) for v in valores)
+            for chave, valores in (param_filter or {}).items()
+        }
+        if any(not valores for valores in permitidos.values()):
+            # Um recorte vazio (``"msc_months": []`` na Variable) não deixa
+            # passar nada; e ``IN ()`` é erro de sintaxe no Trino.
+            return []
         filtros = "".join(
             f" AND json_extract_scalar(u.params, {sql_literal('$.' + chave)}) IN "
-            f"{_lista(sorted(str(v) for v in valores))}"
-            for chave, valores in sorted((param_filter or {}).items())
+            f"{_lista(valores)}"
+            for chave, valores in sorted(permitidos.items())
         )
         e = f"endpoint = {sql_literal(endpoint)}"
         rows = self.executor.records(
