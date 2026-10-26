@@ -1,6 +1,15 @@
 {
   "entregas": [
     {
+      "sha": "5bb3b00",
+      "autor": "ananunesv",
+      "data": "2026-10-22",
+      "assunto": "refactor(siconfi): índices do controle pelo Trino e ajustes da 2ª revisão do PR #86",
+      "tipo": "refactor",
+      "escopo": "siconfi",
+      "texto": "índices do controle pelo Trino e ajustes da 2ª revisão do PR #86"
+    },
+    {
       "sha": "dd80ae9",
       "autor": "Lucas Bottino",
       "data": "2026-10-22",
@@ -35,6 +44,15 @@
       "tipo": "fix",
       "escopo": "dbt",
       "texto": "valor nulo do BB Ágil volta a contar na Gold da Meta 5"
+    },
+    {
+      "sha": "72a9305",
+      "autor": "ananunesv",
+      "data": "2026-10-22",
+      "assunto": "feat(siconfi): ingestão grava só o raw no MinIO e controla a fila pelo Trino",
+      "tipo": "feat",
+      "escopo": "siconfi",
+      "texto": "ingestão grava só o raw no MinIO e controla a fila pelo Trino"
     },
     {
       "sha": "990b790",
@@ -701,27 +719,23 @@
       "tipo": "fix",
       "escopo": "",
       "texto": "persiste extracao BB Agil em lotes, nao so no final"
-    },
-    {
-      "sha": "c1ebe78",
-      "autor": "Caio Melo Borges",
-      "data": "2026-07-15",
-      "assunto": "fix: completa reversao do commit anterior + remove sql/ fora do padrao",
-      "tipo": "fix",
-      "escopo": "",
-      "texto": "completa reversao do commit anterior + remove sql/ fora do padrao"
-    },
-    {
-      "sha": "0812c31",
-      "autor": "Caio Melo Borges",
-      "data": "2026-07-15",
-      "assunto": "refactor: migra extracao BB Agil de JSON local para Postgres raw + dbt",
-      "tipo": "refactor",
-      "escopo": "",
-      "texto": "migra extracao BB Agil de JSON local para Postgres raw + dbt"
     }
   ],
   "pull_requests": [
+    {
+      "numero": 97,
+      "titulo": "docs(adr): ADR 0015 registra a revisão do 0010 e o CI separa regra de código",
+      "autor": "LuizaMaluf",
+      "data": "2026-10-26",
+      "linhas": 456
+    },
+    {
+      "numero": 96,
+      "titulo": "fix(siconfi): controle sem system.query nem system.execute, negados p…",
+      "autor": "ananunesv",
+      "data": "2026-10-26",
+      "linhas": 595
+    },
     {
       "numero": 91,
       "titulo": "feat(governanca): sugestão de descrição do OpenMetadata vira PR",
@@ -742,6 +756,13 @@
       "autor": "CaioMelo25",
       "data": "2026-10-22",
       "linhas": 8242
+    },
+    {
+      "numero": 86,
+      "titulo": "Refatoração Siconfi",
+      "autor": "ananunesv",
+      "data": "2026-10-23",
+      "linhas": 4432
     },
     {
       "numero": 82,
@@ -1108,14 +1129,14 @@
     "2026-07": 11,
     "2026-08": 35,
     "2026-09": 13,
-    "2026-10": 24
+    "2026-10": 26
   },
   "autores": {
     "Caio Melo Borges": 72,
     "Davi de Aguiar Vieira": 36,
     "davi-aguiar-vieira": 36,
+    "ananunesv": 26,
     "Tiago Santos Bittencourt": 22,
-    "ananunesv": 21,
     "Wallyson Souza": 20,
     "arthrok": 20,
     "VictorSzk": 20,
@@ -1127,9 +1148,9 @@
     "Mateushqms": 10,
     "Lucas Bottino": 8,
     "Mateus de Castro": 8,
+    "Luiza Maluf": 6,
     "LuizaMaluf": 6,
     "MatDias97": 6,
-    "Luiza Maluf": 5,
     "João Henrique Egewarth": 5,
     "joao": 5,
     "devwallyson": 4,
@@ -1151,10 +1172,10 @@
     "pedro.rossi1": 1
   },
   "totais": {
-    "commits": 411,
-    "entregas": 236,
-    "pull_requests": 52,
+    "commits": 417,
+    "entregas": 238,
+    "pull_requests": 55,
     "primeiro_commit": "2024-12-12",
-    "ultimo_commit": "2026-10-22"
+    "ultimo_commit": "2026-10-26"
   }
 }
