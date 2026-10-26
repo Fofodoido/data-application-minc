@@ -1,25 +1,36 @@
-"""Semântica do controle da ingestão SICONFI contra um Postgres de verdade.
+"""Semântica do controle da ingestão SICONFI contra um Trino de verdade.
 
 ``test_siconfi_controle.py`` confere o SQL que o controle **escreve**. Aqui ele é
-**executado**: as consultas nativas que vão pelo ``system.query`` (a fila
-pendente, o estado vigente, a busca do planejamento) rodam como estão num
-Postgres, e os ``INSERT`` e ``CREATE`` do controle também. Do Trino só se tira o
-envelope: o prefixo do catálogo, a table function ``system.query`` e a procedure
-``system.execute``. Uma mudança no join, no ``IS NOT DISTINCT FROM`` ou na regra
-do retry quebra estes testes.
+**executado**, num Trino com catálogo PostgreSQL e com a mesma restrição do
+Trino do servidor: o usuário não pode executar a table function
+``system.query`` nem a procedure ``system.execute`` (em 26/10/2026 o servidor
+respondeu ``Access Denied: Cannot execute function hml_analytics.system.query``).
+Uma mudança no join, no ``IS NOT DISTINCT FROM``, na regra do retry ou o uso de
+SQL nativo quebra estes testes.
 
-Rodam quando ``SICONFI_TEST_PG_DSN`` aponta para um Postgres onde se pode criar
-schema. Cada teste usa um schema próprio e o apaga no fim. Sem a variável, são
-pulados. Para rodar com um Postgres descartável::
+Rodam quando ``SICONFI_TEST_TRINO`` aponta para esse Trino (``host:porta``);
+``SICONFI_TEST_TRINO_CATALOG`` dá o catálogo (padrão ``hml_analytics``). Cada
+teste usa um schema próprio e o apaga no fim. Sem a variável, são pulados.
 
-    docker run -d --name pg-teste -p 55432:5432 \\
+A configuração do Trino descartável está em ``tests/trino_acesso_restrito/``: o
+catálogo ``hml_analytics`` aponta para um Postgres descartável, e o
+``rules.json`` libera tabelas e schemas, só as funções embutidas e nenhuma
+procedure. Para subir os dois e rodar::
+
+    docker network create siconfi-teste
+    docker run -d --name pg-siconfi-teste --network siconfi-teste \\
         -e POSTGRES_HOST_AUTH_METHOD=trust postgres:15-alpine
-    export SICONFI_TEST_PG_DSN=postgresql://postgres@localhost:55432/postgres
-    poetry run pytest tests/test_siconfi_controle_postgres.py
+    docker run -d --name trino-siconfi-teste --network siconfi-teste \\
+        -p 58080:8080 -v "$PWD/tests/trino_acesso_restrito:/etc/trino:ro" \\
+        trinodb/trino:478
+    export SICONFI_TEST_TRINO=localhost:58080
+    poetry run pytest tests/test_siconfi_controle_trino.py
+
+O cliente ``trino`` vem com o provider do Airflow; fora da imagem do Airflow,
+``pip install trino``.
 """
 
 import os
-import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterator, Sequence
@@ -27,65 +38,66 @@ from typing import Any, Iterator, Sequence
 import pytest
 
 from cliente_siconfi import request_hash
-from siconfi_controle import SiconfiControle
+from siconfi_controle import EVENTS, PLAN_KEYS, REFERENCE, UNITS, SiconfiControle
 
-_DSN = os.environ.get("SICONFI_TEST_PG_DSN")
+_TRINO = os.environ.get("SICONFI_TEST_TRINO")
+_CATALOGO = os.environ.get("SICONFI_TEST_TRINO_CATALOG", "hml_analytics")
 
 pytestmark = pytest.mark.skipif(
-    not _DSN, reason="SICONFI_TEST_PG_DSN não definida: precisa de um Postgres"
-)
-
-_CATALOGO = "dw"
-_ENVELOPE = re.compile(
-    r'^(?:SELECT \* FROM TABLE\("dw"\.system\.query|CALL "dw"\.system\.execute)'
-    r"\(query => '(?P<sql>.*)'\)\)?$",
-    re.DOTALL,
+    not _TRINO, reason="SICONFI_TEST_TRINO não definida: precisa de um Trino"
 )
 
 
-class _PostgresSemTrino:
-    """``Executor`` que roda o SQL do controle direto no Postgres."""
+class _Trino:
+    """``Executor`` pelo cliente ``trino``, com o usuário que o Airflow usaria."""
 
-    def __init__(self, conn: Any) -> None:
-        self.conn = conn
+    def __init__(self, endereco: str) -> None:
+        import trino
 
-    @staticmethod
-    def _traduzir(sql: str) -> str:
-        envelope = _ENVELOPE.match(sql.strip())
-        if envelope:
-            return envelope.group("sql").replace("''", "'")
-        return sql.replace(f'"{_CATALOGO}".', "")
+        host, porta = endereco.rsplit(":", 1)
+        self.conn = trino.dbapi.connect(host=host, port=int(porta), user="airflow")
+
+    def _executar(self, sql: str) -> list[Sequence[Any]]:
+        cur = self.conn.cursor()
+        cur.execute(sql)
+        return list(cur.fetchall())
 
     def run(self, sql: str) -> None:
-        with self.conn.cursor() as cur:
-            cur.execute(self._traduzir(sql))
+        self._executar(sql)
 
     def records(self, sql: str) -> list[Sequence[Any]]:
-        with self.conn.cursor() as cur:
-            cur.execute(self._traduzir(sql))
-            return list(cur.fetchall())
+        return self._executar(sql)
 
 
 @pytest.fixture
 def controle() -> Iterator[SiconfiControle]:
-    import psycopg2
-
-    conn = psycopg2.connect(_DSN)
-    conn.autocommit = True
-    with conn.cursor() as cur:
-        # O Trino grava instantes em UTC; o literal ``TIMESTAMP '... UTC'`` vira
-        # o mesmo instante no Postgres quando a sessão está em UTC.
-        cur.execute("SET TIME ZONE 'UTC'")
+    executor = _Trino(str(_TRINO))
     schema = f"siconfi_teste_{uuid.uuid4().hex[:10]}"
-    executor = _PostgresSemTrino(conn)
     try:
         c = SiconfiControle(executor, catalog=_CATALOGO, schema=schema)
         c.ensure_tables()
         yield c
     finally:
-        with conn.cursor() as cur:
-            cur.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
-        conn.close()
+        for tabela in (UNITS, EVENTS, REFERENCE, PLAN_KEYS):
+            executor.run(f'DROP TABLE IF EXISTS "{_CATALOGO}"."{schema}".{tabela}')
+        executor.run(f'DROP SCHEMA IF EXISTS "{_CATALOGO}"."{schema}"')
+
+
+def test_o_trino_de_teste_nega_o_sql_nativo_como_o_servidor() -> None:
+    """Sem isto, os outros testes passariam num Trino sem restrição."""
+    executor = _Trino(str(_TRINO))
+    with pytest.raises(Exception, match="Access Denied"):
+        executor.records(
+            f"SELECT * FROM TABLE({_CATALOGO}.system.query(query => 'SELECT 1'))"
+        )
+    with pytest.raises(Exception, match="Access Denied"):
+        executor.run(f"CALL {_CATALOGO}.system.execute(query => 'SELECT 1')")
+
+
+def test_catalogo_inexistente_falha_com_o_nome_da_variable() -> None:
+    c = SiconfiControle(_Trino(str(_TRINO)), catalog="nao_existe", schema="control")
+    with pytest.raises(RuntimeError, match="siconfi_trino_target_catalog"):
+        c.ensure_tables()
 
 
 def _p(ente: int, ano: int = 2025) -> dict[str, Any]:
@@ -164,11 +176,28 @@ def test_revisao_nula_fecha_com_evento_de_revisao_nula(
     assert _pendentes(controle) == []
 
 
+def test_outra_task_le_do_banco_o_que_ja_foi_planejado(
+    controle: SiconfiControle,
+) -> None:
+    """Cada task cria o seu controle: o que outra planejou vem da tabela."""
+    controle.enqueue_many("rreo", [(_p(1), "r1"), (_p(2), None)])
+    outra = SiconfiControle(controle.executor, controle.catalog, controle.schema)
+    assert outra.enqueue_many("rreo", [(_p(1), "r1"), (_p(2), None)]) == 0
+    assert outra.enqueue_many("rreo", [(_p(1), "r2"), (_p(3), None)]) == 2
+
+
+def test_replanejar_revisao_nula_nao_duplica(controle: SiconfiControle) -> None:
+    assert controle.enqueue_many("rreo", [(_p(1), None)]) == 1
+    assert controle.enqueue_many("rreo", [(_p(1), None)]) == 0
+    assert controle.enqueue_many("rreo", [(_p(1), "r")]) == 1
+
+
 def test_filtro_do_recorte_e_limite(controle: SiconfiControle) -> None:
     controle.enqueue_many(
         "rreo", [(_p(1, 2024), None), (_p(2, 2025), None), (_p(3, 2025), None)]
     )
     assert _pendentes(controle, an_exercicio=[2025]) == [2, 3]
+    assert _pendentes(controle, an_exercicio=[2024, 2025], id_ente=[1, 3]) == [1, 3]
     assert len(controle.pending("rreo", 1)) == 1
 
 
@@ -202,16 +231,3 @@ def test_referencia_e_planejamento(controle: SiconfiControle) -> None:
     controle.mark_planned("extrato_entregas", "h1", ["a", "b"])
     controle.mark_planned("extrato_entregas", "h2", ["c"])
     assert controle.planned_keys("extrato_entregas", "h1") == {"a", "b"}
-
-
-def test_indices_das_consultas_existem(controle: SiconfiControle) -> None:
-    linhas = controle.executor.records(
-        "SELECT tablename FROM pg_indexes "
-        f"WHERE schemaname = '{controle.schema}' AND indexname LIKE '%_busca_idx'"
-    )
-    assert {row[0] for row in linhas} == {
-        "siconfi_work_units",
-        "siconfi_work_events",
-        "siconfi_plan_keys",
-        "siconfi_reference_refresh",
-    }
