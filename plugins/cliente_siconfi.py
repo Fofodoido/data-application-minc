@@ -1,8 +1,11 @@
 """Cliente resiliente para a API pública SICONFI.
 
-O limite divulgado pelo Tesouro é de uma requisição por segundo.  O
-``SiconfiRateLimiter`` usa PostgreSQL como coordenador para que esse contrato
-continue valendo entre tasks, workers e DAGs diferentes.
+O limite divulgado pelo Tesouro é de uma requisição por segundo. O
+``SiconfiRateLimiter`` espaça as requisições dentro do processo; o contrato vale
+para a API inteira porque a ``siconfi_ingestion_dag`` roda uma task por vez
+(``max_active_tasks=1``) e um run por vez. Paralelizar endpoints nunca deu
+vazão: a API já limita tudo a 1 req/s. E o Airflow não fala com banco (ADR 0005
+e 0009), então o limitador não pode morar no Postgres.
 """
 
 from __future__ import annotations
@@ -14,18 +17,13 @@ import random
 import time
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Iterator, Mapping
 
 import httpx
-import psycopg2
-from psycopg2 import sql
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://apidatalake.tesouro.gov.br/ords/cdwhprd/siconfi/tt"
-RATE_LIMIT_NAME = "siconfi_public_api"
-CONTROL_SCHEMA = "siconfi_control"
 RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 
 
@@ -69,104 +67,21 @@ def request_hash(endpoint: str, params: dict[str, Any]) -> str:
 
 
 class SiconfiRateLimiter:
-    """Reserva horários de chamada com lock transacional no PostgreSQL.
+    """Garante ``interval_s`` entre o início de duas requisições deste processo."""
 
-    A transação só mantém o lock durante a reserva; o ``sleep`` acontece fora
-    dela. Assim, várias tasks podem reservar posições consecutivas sem produzir
-    rajadas contra a API.
-
-    A conexão é reaproveitada entre reservas: a 1 req/s, abrir uma conexão nova
-    por requisição custaria milhares de handshakes por hora contra um Postgres
-    que normalmente está em outra infra. O DDL idempotente roda uma vez por
-    conexão, não uma vez por requisição.
-    """
-
-    def __init__(
-        self,
-        conn_str: str,
-        schema: str = CONTROL_SCHEMA,
-        interval_s: float = 1.05,
-    ) -> None:
-        self.conn_str = conn_str
-        self.schema = schema
+    def __init__(self, interval_s: float = 1.05) -> None:
         self.interval_s = interval_s
-        self._conn: Any | None = None
-
-    def _connection(self) -> Any:
-        if self._conn is None or self._conn.closed:
-            conn = psycopg2.connect(self.conn_str)
-            with conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
-                            sql.Identifier(self.schema)
-                        )
-                    )
-                    cur.execute(
-                        sql.SQL(
-                            """
-                            CREATE TABLE IF NOT EXISTS {}.api_rate_limit (
-                                limiter_name TEXT PRIMARY KEY,
-                                next_allowed_at TIMESTAMPTZ NOT NULL
-                            )
-                            """
-                        ).format(sql.Identifier(self.schema))
-                    )
-                    cur.execute(
-                        sql.SQL(
-                            """
-                            INSERT INTO {}.api_rate_limit (limiter_name, next_allowed_at)
-                            VALUES (%s, now())
-                            ON CONFLICT (limiter_name) DO NOTHING
-                            """
-                        ).format(sql.Identifier(self.schema)),
-                        (RATE_LIMIT_NAME,),
-                    )
-            self._conn = conn
-        return self._conn
-
-    def close(self) -> None:
-        if self._conn is not None and not self._conn.closed:
-            self._conn.close()
-        self._conn = None
-
-    def _reserve_slot(self) -> tuple[datetime, datetime]:
-        interval = timedelta(seconds=self.interval_s)
-        conn = self._connection()
-        with conn:
-            with conn.cursor() as cur:
-                now = datetime.now(timezone.utc)
-                cur.execute(
-                    sql.SQL(
-                        "SELECT next_allowed_at FROM {}.api_rate_limit "
-                        "WHERE limiter_name = %s FOR UPDATE"
-                    ).format(sql.Identifier(self.schema)),
-                    (RATE_LIMIT_NAME,),
-                )
-                scheduled = max(now, cur.fetchone()[0])
-                cur.execute(
-                    sql.SQL(
-                        "UPDATE {}.api_rate_limit SET next_allowed_at = %s "
-                        "WHERE limiter_name = %s"
-                    ).format(sql.Identifier(self.schema)),
-                    (scheduled + interval, RATE_LIMIT_NAME),
-                )
-        return now, scheduled
+        self._next_allowed = 0.0
 
     def reserve(self) -> None:
-        # Uma conexão reaproveitada pode ter morrido entre reservas (queda de
-        # rede, reinício do Postgres). Reconectar e repetir é seguro: a reserva
-        # perdida só devolve um slot de tempo à fila.
-        try:
-            now, scheduled = self._reserve_slot()
-        except psycopg2.Error as exc:
-            logger.warning("[siconfi] rate limiter: reconectando após %s", exc)
-            self.close()
-            now, scheduled = self._reserve_slot()
-        wait_s = max(0.0, (scheduled - now).total_seconds())
-        if wait_s:
-            logger.info("[siconfi] rate limiter: aguardando %.2fs", wait_s)
+        now = time.monotonic()
+        wait_s = self._next_allowed - now
+        if wait_s > 0:
             time.sleep(wait_s)
+        self._next_allowed = max(now, self._next_allowed) + self.interval_s
+
+    def close(self) -> None:
+        """Sem recurso a liberar; existe para o cliente fechar tudo de um jeito só."""
 
 
 class SiconfiClient:
@@ -174,7 +89,6 @@ class SiconfiClient:
 
     def __init__(
         self,
-        conn_str: str,
         *,
         timeout_s: float = 90.0,
         max_retries: int = 4,
@@ -184,7 +98,7 @@ class SiconfiClient:
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.page_limit = page_limit
-        self.rate_limiter = SiconfiRateLimiter(conn_str, interval_s=rate_limit_interval_s)
+        self.rate_limiter = SiconfiRateLimiter(interval_s=rate_limit_interval_s)
         self.client = httpx.Client(
             base_url=BASE_URL,
             headers={"Accept": "application/json"},
@@ -234,9 +148,9 @@ class SiconfiClient:
     @staticmethod
     def _backoff(attempt: int, retry_after: str | None) -> None:
         try:
-            base = float(retry_after) if retry_after else min(60.0, 2.0 ** attempt)
+            base = float(retry_after) if retry_after else min(60.0, 2.0**attempt)
         except ValueError:
-            base = min(60.0, 2.0 ** attempt)
+            base = min(60.0, 2.0**attempt)
         wait_s = base + random.uniform(0, min(1.0, base * 0.2))
         logger.warning("[siconfi] retry HTTP em %.2fs (tentativa %s)", wait_s, attempt)
         time.sleep(wait_s)

@@ -1,0 +1,22 @@
+# Recusa o PR que muda um ADR ou o verificar.py junto com dbt/minc/models/.
+# A regra de arquitetura muda num PR próprio, aprovado antes do código que
+# depende dela (docs/adr/GUIA.md).
+name: Regra e código em PRs separados
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Conferir o diff contra a base
+        run: python3 scripts/checar_regra_e_codigo.py "origin/${{ github.base_ref }}"

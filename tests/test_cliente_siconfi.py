@@ -375,3 +375,27 @@ def test_filtro_invalido_do_rreo_falha_cedo(config: dict) -> None:
 def test_recorte_invalido_falha_cedo(config: dict) -> None:
     with pytest.raises(ValueError, match="siconfi_config"):
         PlanScope.from_config({**_ANOS, **config})
+
+
+# --- Limitador em memória --------------------------------------------------
+
+
+def test_limitador_espaca_as_requisicoes_sem_banco(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """1 req/s na API inteira: a DAG roda uma task por vez, então basta o
+    processo espaçar as próprias chamadas -- sem Postgres (ADR 0005)."""
+    import cliente_siconfi
+
+    relogio = iter([100.0, 100.2, 101.05, 103.0])
+    esperas: list[float] = []
+    monkeypatch.setattr(cliente_siconfi.time, "monotonic", lambda: next(relogio))
+    monkeypatch.setattr(cliente_siconfi.time, "sleep", esperas.append)
+
+    limitador = cliente_siconfi.SiconfiRateLimiter(interval_s=1.0)
+    for _ in range(4):
+        limitador.reserve()
+
+    # 1ª imediata; 2ª chega 0,2 s depois e espera 0,8 s; 3ª chega 1,05 s depois
+    # da 1ª, mas a 2ª saiu às 101,0, então espera 0,95 s; 4ª já passou do prazo.
+    assert esperas == pytest.approx([0.8, 0.95])

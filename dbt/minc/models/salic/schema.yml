@@ -1,0 +1,115 @@
+version: 2
+
+# SALIC fora do salic_dbt, na estrutura do ADR 0010, lendo a ingestão v2
+# (salic_bronze, source bronze_sac). Os nomes seguem a entidade <banco>_<tabela>
+# do ADR. Quando o salic_dbt migrar, os modelos sac__<tabela> de lá (que tipam)
+# viram silver_sac_<tabela> aqui e reaproveitam estas bronzes.
+models:
+  - name: bronze_sac_captacao
+    description: >
+      Camada Bronze — cópia fiel de salic_bronze.sac__captacao (ingestão SALIC
+      v2, via Trino), sem cast, filtro nem join (ADR 0010). Todas as colunas
+      chegam como text, como na origem. Table, e não view: a ingestão v2
+      recria a origem com DROP pelo Trino, sem CASCADE.
+    config:
+      tags:
+        - bronze
+        - salic
+    meta:
+      openmetadata:
+        domain: Cultura.Incentivo Fiscal
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: bronze_sac_projetos
+    description: >
+      Camada Bronze — cópia fiel de salic_bronze.sac__projetos (ingestão SALIC
+      v2, via Trino), sem cast, filtro nem join (ADR 0010). Todas as colunas
+      chegam como text, como na origem. Table, e não view: a ingestão v2
+      recria a origem com DROP pelo Trino, sem CASCADE.
+    config:
+      tags:
+        - bronze
+        - salic
+    meta:
+      openmetadata:
+        domain: Cultura.Incentivo Fiscal
+        tier: Tier.Tier4
+        owner: minc-data-engineering
+
+  - name: silver_sac_captacao_proponente
+    description: >
+      Camada Silver — um recibo de captação da Lei Rouanet por linha, com o
+      proponente que recebeu o recurso. Junta o recibo (sac__captacao) ao
+      cadastro do projeto pelo PRONAC e tipa; não decide quais recibos
+      contam para um indicador. Grão: 1 linha por recibo de captação.
+
+      O proponente de cada PRONAC vem de sac__projetos (cgccpf), o cadastro
+      oficial do projeto. O PRONAC sai da macro pronac_de_ano_sequencial nas
+      duas tabelas, a mesma do fct_captacao_rouanet. Recibo cujo PRONAC o
+      cadastro não resolve fica de fora sem erro; o teste singular
+      salic_recibo_sem_proponente (severity warn) avisa por PRONAC, separando
+      PRONAC malformado de ausente do cadastro, e o
+      salic_recibo_sem_proponente_em_massa (severity error) trava o build
+      quando a perda passa de 1% dos recibos.
+
+      Lê a ingestão v2 do SALIC (salic_bronze). Até 21/10/2026 lia a v1
+      (schema `bronze`) e usava sac__tbapiprojetorouanet como reserva de
+      proponente; a v2 não ingere essa tabela, e o cadastro sozinho já
+      resolvia 100% dos recibos válidos.
+    config:
+      tags: [silver, salic, rouanet]
+      meta:
+        status: Active
+        origem_dados: 'bronze_sac_captacao + bronze_sac_projetos'
+        openmetadata:
+          domain: Cultura.Fomento Direto
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+          tags:
+            - Certification.Silver
+          glossary:
+            - MinC.Politicas.Rouanet
+            - MinC.Agentes.Proponente
+    columns:
+      - name: proponente_documento
+        description: CPF (11) ou CNPJ (14) do proponente, normalizado com LPAD.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.Sensitive
+            glossary:
+              - MinC.Identificadores.IdentificadorUnico
+        tests:
+          - not_null
+      - name: proponente_nome
+        description: >
+          Nome do proponente. Sempre nulo hoje: o cadastro (sac__projetos)
+          não traz o nome; a coluna fica pelo contrato do modelo.
+        data_type: text
+        meta:
+          openmetadata:
+            tags:
+              - PII.NonSensitive
+      - name: data_recibo
+        description: Data do recibo de captação.
+        data_type: date
+        tests:
+          - not_null
+      - name: valor_captado
+        description: >
+          Valor captado no recibo, em reais, como a origem registra — pode ser
+          zero ou negativo.
+        data_type: numeric
+        tests:
+          - not_null
+      - name: pronac
+        description: >
+          PRONAC do projeto que captou, pela macro pronac_de_ano_sequencial —
+          anoprojeto (2 dígitos) concatenado ao sequencial, sem preencher o
+          sequencial. Chave de ligação entre o recibo e
+          o proponente.
+        data_type: text
+        tests:
+          - not_null

@@ -37,47 +37,78 @@ do RREO no bimestre 6)::
 
 O recorte vale também para o que já está na fila: estreitá-lo para de buscar o
 que ficou de fora, sem apagar nada. Cada task de ingestão trabalha até
-``max_run_minutes`` e devolve à fila o que não processou.
+``max_run_minutes``; o que não processou continua pendente para o próximo run.
+
+Destino (ADR 0009): cada página vai para o raw do datalakehouse, em
+``raw/siconfi/<entidade>/``, como chegou, uma pasta por run (ver
+``siconfi_storage``). Não há staging: a carga da bronze
+(``siconfi.bronze_<entidade>``) lê o raw.
+
+Controle (ADR 0005 e 0009): o Airflow não fala com banco, só com o Trino. A fila,
+o refresh das tabelas de referência e o que o planejamento já leu ficam em
+``<catalogo>.control.siconfi_*``, escritos só por ``INSERT`` pelo Trino, como os
+logs do SALIC v2 e do Mapas (ver ``siconfi_controle``). Sem trava de linha, uma
+unidade nunca é processada por duas tasks porque a DAG roda um run por vez e uma
+task por vez (``max_active_tasks=1``), o que também garante o limite de 1 req/s
+da API com um limitador em memória. Catálogo e schema vêm das Variables
+``siconfi_trino_target_catalog`` (padrão ``dw``) e ``siconfi_trino_control_schema``
+(padrão ``control``).
+
+Cada entidade tem uma task ``anunciar_<entidade>`` que roda mesmo se a ingestão
+falhou e emite o Asset ``raw/siconfi/<entidade>`` com a pasta do run no
+``extra``, mas só quando a pasta tem arquivo. É o que vai disparar a carga da
+bronze. A pasta de um run tem só o que aquele run processou: quem consome precisa
+ler todos os eventos recebidos, não só o mais novo. A task
+``falhar_se_algo_falhou`` deixa o run vermelho quando qualquer task falha.
+
+Agendamento: o ``@hourly`` não é uma coleta por hora. Com um run por vez e uma
+task por vez, as 7 tasks de ingestão (extrato e 6 fatos) rodam em série, até
+``max_run_minutes`` cada: com fila cheia, um run leva de 5 a 6 horas. Com
+``max_active_runs=1`` e ``catchup=False``, o scheduler não acumula runs: quando um
+termina, ele cria logo o do intervalo mais recente. Na prática a DAG roda sem
+parar enquanto há fila, e de hora em hora quando a fila está vazia (aí o run
+termina em minutos). A vazão é a mesma de rodar em paralelo, porque a API limita
+tudo a 1 req/s.
+
+Precisa das conexões ``minio_datalakehouse`` e ``trino_default`` no Airflow.
 """
 
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timedelta
 from typing import Any
 
-from airflow.sdk import Variable, dag, get_current_context, task
+from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException
+from airflow.sdk import TriggerRule, Variable, dag, task
 
-from cliente_siconfi import (
-    FACT_ENDPOINTS,
-    PlanScope,
-    SiconfiClient,
-    SiconfiPermanentError,
-    SiconfiRetryableError,
-    planned_units,
-)
-from postgres_helpers import get_postgres_conn
+import datalakehouse
+from cliente_siconfi import FACT_ENDPOINTS, PlanScope, SiconfiClient
 from schedule_loader import get_dynamic_schedule
-from siconfi_storage import CLAIM_LEASE_MINUTES, SiconfiStorage
+from siconfi_controle import SiconfiControle, controle_do_airflow
+from siconfi_storage import (
+    FONTE,
+    entidade,
+    entity_ids_do_raw,
+    ingerir_endpoint,
+    persist_page,
+    plan_from_extrato,
+    prefixo_raw_do_run,
+)
 
 logger = logging.getLogger(__name__)
 
-# Não há pool do Airflow aqui de propósito: o contrato de 1 req/s é garantido
-# pelo SiconfiRateLimiter, que coordena via PostgreSQL e por isso vale entre
-# tasks, workers e DAGs. Um pool seria redundante — e, se não existisse na
-# instância, o scheduler deixaria as tasks em `scheduled` para sempre, sem log.
 _DEFAULT_CONFIG: dict[str, Any] = {
     "start_year": datetime.now().year,
     "end_year": datetime.now().year,
     "entity_ids": [],
     "page_limit": 5000,
-    # O limite real de cada task é o tempo; este teto só evita reservar demais.
+    # O limite real de cada task é o tempo; este teto só evita ler demais da fila.
     "max_work_units_per_run": 2000,
     "max_run_minutes": 45,
     "reference_refresh_hours": 168,
-    # Linhas do extrato lidas por execução do planejamento, a partir de onde
-    # a anterior parou.
+    # Itens do extrato lidos por execução do planejamento, sempre em arquivos
+    # inteiros do raw que ainda não foram planejados com o recorte atual.
     "max_manifest_rows_for_planning": 100000,
     "fact_endpoints": None,
     "rreo_periods": None,
@@ -93,8 +124,10 @@ _DEFAULT_CONFIG: dict[str, Any] = {
 _DEFAULT_ARGS = {"owner": "MinC", "retries": 2, "retry_delay": timedelta(minutes=10)}
 # Unidades de trabalho acumuladas antes de cada gravação em lote no planejamento.
 _PLAN_FLUSH_SIZE = 5000
-# Linhas do extrato lidas do banco de cada vez no planejamento.
-_PLAN_READ_BATCH = 10000
+# Tabelas de referência, atualizadas a cada ``reference_refresh_hours``.
+_REFERENCE_ENDPOINTS = ("anexos-relatorios", "entes")
+# Teto do ``max_run_minutes``: abaixo do ``execution_timeout`` das tasks.
+_MAX_RUN_MINUTES = 110
 
 
 def _config() -> dict[str, Any]:
@@ -106,56 +139,74 @@ def _config() -> dict[str, Any]:
         raise ValueError(
             "siconfi_config: page_limit e max_work_units_per_run devem ser positivos"
         )
-    if not 0 < float(config["max_run_minutes"]) < CLAIM_LEASE_MINUTES:
+    if not 0 < float(config["max_run_minutes"]) <= _MAX_RUN_MINUTES:
         raise ValueError(
-            f"siconfi_config: max_run_minutes deve ficar entre 0 e {CLAIM_LEASE_MINUTES}"
+            f"siconfi_config: max_run_minutes deve ficar entre 0 e {_MAX_RUN_MINUTES}"
         )
     PlanScope.from_config(config)  # valida as chaves de recorte
     return config
 
 
-def _run_id() -> str:
-    return str(get_current_context()["run_id"])
+def _controle() -> SiconfiControle:
+    return controle_do_airflow()
 
 
-def _storage(conn_str: str) -> SiconfiStorage:
-    storage = SiconfiStorage(conn_str)
-    storage.ensure_tables()
-    return storage
+def _client(config: dict[str, Any]) -> SiconfiClient:
+    return SiconfiClient(page_limit=int(config["page_limit"]))
+
+
+def _run() -> tuple[str, datetime]:
+    """``run_id`` e a data que dá nome à pasta do run no datalakehouse."""
+    return datalakehouse.run_atual()
+
+
+def _asset(endpoint: str) -> Any:
+    return datalakehouse.asset(
+        datalakehouse.prefixo(datalakehouse.CAMADA_RAW, FONTE, entidade(endpoint))
+    )
 
 
 def _refresh_reference(
-    conn_str: str, config: dict[str, Any], run_id: str
-) -> dict[str, int]:
-    storage = _storage(conn_str)
-    client = SiconfiClient(conn_str, page_limit=int(config["page_limit"]))
-    result: dict[str, int] = {}
+    controle: SiconfiControle, config: dict[str, Any], run_id: str, data: datetime
+) -> dict[str, int | None]:
+    """Itens gravados por tabela de referência; ``None`` quando não venceu."""
+    client = _client(config)
+    result: dict[str, int | None] = {}
     try:
-        for endpoint in ("anexos-relatorios", "entes"):
-            if not storage.reference_due(
+        for endpoint in _REFERENCE_ENDPOINTS:
+            if not controle.reference_due(
                 endpoint, int(config["reference_refresh_hours"])
             ):
-                result[endpoint] = 0
+                result[endpoint] = None
                 continue
             result[endpoint] = sum(
-                storage.persist_page(page, run_id)
+                persist_page(page, run_id, data)
                 for page in client.iter_pages(endpoint, {})
             )
-            storage.mark_reference_refreshed(endpoint)
+            # Só depois da última página: o planejamento lê os entes desta
+            # pasta, e uma pasta pela metade deixaria entes de fora.
+            controle.mark_reference_refreshed(
+                endpoint, prefixo_raw_do_run(endpoint, run_id, data), run_id
+            )
     finally:
         client.close()
     return result
 
 
-def _plan_extrato(conn_str: str, config: dict[str, Any]) -> int:
-    storage = _storage(conn_str)
-    entity_ids = [int(value) for value in config["entity_ids"]] or storage.entity_ids()
+def _entity_ids(controle: SiconfiControle, config: dict[str, Any]) -> list[int]:
+    return [int(value) for value in config["entity_ids"]] or entity_ids_do_raw(
+        controle.reference_prefix("entes")
+    )
+
+
+def _plan_extrato(controle: SiconfiControle, config: dict[str, Any]) -> int:
+    entity_ids = _entity_ids(controle, config)
     if not entity_ids:
         raise ValueError(
-            "Nenhum ente disponível; aguarde a carga de /entes " "ou configure entity_ids"
+            "Nenhum ente disponível; aguarde a carga de /entes ou configure entity_ids"
         )
     years = range(int(config["start_year"]), int(config["end_year"]) + 1)
-    created = storage.enqueue_many(
+    created = controle.enqueue_many(
         "extrato_entregas",
         (
             ({"id_ente": entity_id, "an_referencia": year}, None)
@@ -169,16 +220,16 @@ def _plan_extrato(conn_str: str, config: dict[str, Any]) -> int:
     return created
 
 
-def _plan_dca(storage: SiconfiStorage, scope: PlanScope, config: dict[str, Any]) -> int:
+def _plan_dca(controle: SiconfiControle, scope: PlanScope, config: dict[str, Any]) -> int:
     """Enfileira a DCA por ente e exercício, sem consultar o extrato."""
     if not scope.enabled("dca"):
         return 0
-    entity_ids = [int(value) for value in config["entity_ids"]] or storage.entity_ids()
+    entity_ids = _entity_ids(controle, config)
     if not entity_ids:
         raise ValueError(
             "Nenhum ente disponível; aguarde a carga de /entes ou configure entity_ids"
         )
-    created = storage.enqueue_many("dca", scope.dca_units(entity_ids))
+    created = controle.enqueue_many("dca", scope.dca_units(entity_ids))
     logger.info(
         "[siconfi] %s unidades de dca novas, %s entes, exercícios %s a %s",
         created,
@@ -189,140 +240,125 @@ def _plan_dca(storage: SiconfiStorage, scope: PlanScope, config: dict[str, Any])
     return created
 
 
-def _plan_facts(conn_str: str, config: dict[str, Any]) -> dict[str, int]:
+def _plan_facts(controle: SiconfiControle, config: dict[str, Any]) -> dict[str, int]:
     scope = PlanScope.from_config(config)
-    storage = _storage(conn_str)
-    created = {endpoint: 0 for endpoint in FACT_ENDPOINTS}
-    created["dca"] = _plan_dca(storage, scope, config)
-    # As unidades vão para o banco em lotes: um extrato nacional completo
-    # planeja centenas de milhares delas, e uma conexão por unidade fazia
-    # esta task nunca terminar contra um Postgres remoto.
-    buffers: dict[str, list[tuple[dict[str, Any], str | None]]] = {
-        endpoint: [] for endpoint in FACT_ENDPOINTS
-    }
-
-    def flush(endpoint: str) -> None:
-        if buffers[endpoint]:
-            created[endpoint] += storage.enqueue_many(endpoint, buffers[endpoint])
-            buffers[endpoint].clear()
-
-    # O extrato é lido a partir de onde a execução anterior parou. Antes, só
-    # as 100 mil linhas mais recentes eram lidas, e num backfill nacional a
-    # maior parte do extrato nunca era planejada. Mudar o recorte zera a marca
-    # e relê tudo.
-    fingerprint = scope.fingerprint()
-    after = storage.plan_watermark("extrato_entregas", fingerprint)
-    budget = int(config["max_manifest_rows_for_planning"])
-    read = 0
-    while read < budget:
-        batch = storage.payloads_since(
-            "extrato_entregas", after, min(_PLAN_READ_BATCH, budget - read)
-        )
-        if not batch:
-            break
-        for _, item in batch:
-            for endpoint, params, revision in planned_units(item, scope):
-                buffers[endpoint].append((params, revision))
-                if len(buffers[endpoint]) >= _PLAN_FLUSH_SIZE:
-                    flush(endpoint)
-        for endpoint in FACT_ENDPOINTS:
-            flush(endpoint)
-        after = batch[-1][0]
-        storage.save_plan_watermark("extrato_entregas", after, fingerprint)
-        read += len(batch)
-    logger.info("[siconfi] %s linhas do extrato lidas; unidades novas: %s", read, created)
+    created = plan_from_extrato(
+        controle,
+        scope,
+        budget=int(config["max_manifest_rows_for_planning"]),
+        flush_size=_PLAN_FLUSH_SIZE,
+    )
+    created["dca"] = _plan_dca(controle, scope, config)
+    logger.info("[siconfi] unidades novas: %s", created)
     return created
 
 
-def _ingest_work(
-    endpoint: str, conn_str: str, config: dict[str, Any], run_id: str
-) -> dict[str, int]:
-    scope = PlanScope.from_config(config)
-    summary = dict.fromkeys(
-        ("claimed", "success", "no_data", "retry", "permanent_error", "released", "rows"),
-        0,
-    )
-    if not scope.enabled(endpoint):
-        logger.info("[siconfi] %s fora do recorte; nada a fazer", endpoint)
-        return summary
-    storage = _storage(conn_str)
-    claimed = storage.claim(
-        endpoint,
-        int(config["max_work_units_per_run"]),
-        run_id,
-        param_filter=scope.constraints(endpoint),
-    )
-    summary["claimed"] = len(claimed)
-    deadline = time.monotonic() + 60 * float(config["max_run_minutes"])
-    done = 0
-    client = SiconfiClient(conn_str, page_limit=int(config["page_limit"]))
+def _ingerir(endpoint: str) -> dict[str, int]:
+    run_id, data = _run()
+    config = _config()
+    client = _client(config)
     try:
-        for unit in claimed:
-            if time.monotonic() >= deadline:
-                break
-            try:
-                rows = sum(
-                    storage.persist_page(page, run_id)
-                    for page in client.iter_pages(endpoint, unit["params"])
-                )
-                status, error = ("success" if rows else "no_data"), None
-                summary["rows"] += rows
-            except SiconfiRetryableError as exc:
-                status, error = "retry", str(exc)
-                logger.warning("[siconfi] %s será repetido: %s", endpoint, exc)
-            except SiconfiPermanentError as exc:
-                status = "no_data" if exc.status_code == 404 else "permanent_error"
-                error = str(exc)
-                logger.warning("[siconfi] %s não recuperável: %s", endpoint, exc)
-            storage.complete(endpoint, unit["work_key"], status, error)
-            summary[status] += 1
-            done += 1
+        summary = ingerir_endpoint(
+            endpoint,
+            _controle(),
+            client,
+            PlanScope.from_config(config),
+            run_id,
+            data,
+            limite=int(config["max_work_units_per_run"]),
+            prazo_s=60 * float(config["max_run_minutes"]),
+        )
     finally:
         client.close()
-        # Por tempo esgotado ou por erro inesperado: o que não foi processado
-        # volta para a fila agora, não quando o lease vencer.
-        remaining = [unit["work_key"] for unit in claimed[done:]]
-        storage.release(endpoint, remaining, run_id)
-        summary["released"] = len(remaining)
     logger.info("[siconfi] %s: %s", endpoint, summary)
     return summary
 
 
+def _anunciar(endpoint: str) -> str:
+    """Emite o Asset da entidade se a pasta deste run tem arquivo.
+
+    Roda mesmo se a ingestão falhou no meio: o que foi gravado antes da falha
+    também precisa chegar à bronze. Sem arquivo, a task é pulada e nenhum evento
+    sai.
+    """
+    run_id, data = _run()
+    prefixo = prefixo_raw_do_run(endpoint, run_id, data)
+    # Pede uma chave só: listar a pasta inteira de uma MSC só para saber se
+    # está vazia materializaria centenas de milhares de nomes.
+    if not datalakehouse.existe_objeto(prefixo):
+        raise AirflowSkipException(f"nada gravado em {prefixo}")
+    datalakehouse.publicar_cadeia(_asset(endpoint), {entidade(endpoint): prefixo})
+    return prefixo
+
+
+@task
+def preparar_controle() -> None:
+    """Confere o conector e garante tabelas e índices, uma vez por run."""
+    controle_do_airflow(garantir_tabelas=True)
+
+
+@task(trigger_rule=TriggerRule.ONE_FAILED)
+def falhar_se_algo_falhou() -> None:
+    """Deixa o run vermelho: as tasks ``anunciar_*`` terminam bem mesmo quando a
+    ingestão de antes falhou, e esconderiam a falha."""
+    raise AirflowFailException("uma ou mais tasks da ingestão SICONFI falharam")
+
+
 @dag(
     dag_id="siconfi_ingestion_dag",
+    # Não é uma coleta por hora: com fila cheia cada run leva horas, e o próximo
+    # sai assim que ele termina. Ver "Agendamento" no topo.
     schedule=get_dynamic_schedule("siconfi_ingestion_dag", default="@hourly"),
     start_date=datetime(2026, 1, 1),
     catchup=False,
     max_active_runs=1,
+    # Uma task por vez: sem trava de linha no controle, é o que impede duas tasks
+    # na mesma fila, e o que faz o limitador em memória valer para a API toda.
+    max_active_tasks=1,
     default_args=_DEFAULT_ARGS,
-    tags=["minc", "siconfi", "tesouro", "raw", "bronze"],
+    tags=["minc", "siconfi", "tesouro", "datalakehouse", "raw"],
 )
 def siconfi_ingestion_dag() -> None:
     @task
-    def refresh_reference_data() -> dict[str, int]:
-        return _refresh_reference(get_postgres_conn(), _config(), _run_id())
+    def refresh_reference_data() -> dict[str, int | None]:
+        run_id, data = _run()
+        return _refresh_reference(_controle(), _config(), run_id, data)
 
     @task
     def plan_extrato() -> int:
-        return _plan_extrato(get_postgres_conn(), _config())
+        return _plan_extrato(_controle(), _config())
 
     @task
     def plan_facts() -> dict[str, int]:
-        return _plan_facts(get_postgres_conn(), _config())
+        return _plan_facts(_controle(), _config())
 
-    @task
+    @task(execution_timeout=timedelta(hours=2))
     def ingest(endpoint: str) -> dict[str, int]:
-        return _ingest_work(endpoint, get_postgres_conn(), _config(), _run_id())
+        return _ingerir(endpoint)
 
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def anunciar(endpoint: str) -> str:
+        return _anunciar(endpoint)
+
+    def anuncio(endpoint: str) -> Any:
+        return anunciar.override(
+            task_id=f"anunciar_{entidade(endpoint)}", outlets=[_asset(endpoint)]
+        )(endpoint)
+
+    preparar = preparar_controle()
+    refresh = refresh_reference_data()
+    extrato = plan_extrato()
+    ingest_extrato = ingest.override(task_id="ingest_extrato")("extrato_entregas")
     planned_facts = plan_facts()
-    (
-        refresh_reference_data()
-        >> plan_extrato()
-        >> ingest.override(task_id="ingest_extrato")("extrato_entregas")
-        >> planned_facts
-    )
+    tarefas: list[Any] = [preparar, refresh, extrato, ingest_extrato, planned_facts]
+    preparar >> refresh >> extrato >> ingest_extrato >> planned_facts
+    for endpoint in _REFERENCE_ENDPOINTS:
+        tarefas.append(refresh >> anuncio(endpoint))
+    tarefas.append(ingest_extrato >> anuncio("extrato_entregas"))
     for endpoint in FACT_ENDPOINTS:
-        planned_facts >> ingest.override(task_id=f"ingest_{endpoint}")(endpoint)
+        ingest_fato = ingest.override(task_id=f"ingest_{endpoint}")(endpoint)
+        tarefas.extend([planned_facts >> ingest_fato, ingest_fato >> anuncio(endpoint)])
+    tarefas >> falhar_se_algo_falhou()
 
 
 siconfi_ingestion_dag()

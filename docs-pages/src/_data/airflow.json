@@ -109,10 +109,24 @@
         "minc",
         "siconfi",
         "tesouro",
-        "raw",
-        "bronze"
+        "datalakehouse",
+        "raw"
       ],
       "schedule": "dinâmico (schedule_loader)"
+    },
+    {
+      "arquivo": "siconfi_migracao_raw_pages_dag.py",
+      "caminho": "dags/data_ingest/siconfi/siconfi_migracao_raw_pages_dag.py",
+      "fonte": "siconfi",
+      "dag_id": "siconfi_migracao_raw_pages_dag",
+      "descricao": "",
+      "tags": [
+        "minc",
+        "siconfi",
+        "datalakehouse",
+        "migracao"
+      ],
+      "schedule": ""
     },
     {
       "arquivo": "ingest_territorio_fcu_dag.py",
@@ -389,7 +403,7 @@
       "sistema": "siconfi",
       "nome": "SiconfiRateLimiter",
       "base": "",
-      "descricao": "Reserva horários de chamada com lock transacional no PostgreSQL."
+      "descricao": "Garante ``interval_s`` entre o início de duas requisições deste processo."
     },
     {
       "arquivo": "cliente_siconfi.py",
@@ -448,12 +462,12 @@
     "inep": 1,
     "mapas": 1,
     "salic": 2,
-    "siconfi": 1,
+    "siconfi": 2,
     "territorio": 1,
     "transferegov_fundo_a_fundo": 10
   },
   "totais": {
-    "dags": 19,
+    "dags": 20,
     "fontes": 9,
     "clientes": 24
   }

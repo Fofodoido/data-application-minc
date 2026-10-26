@@ -24,20 +24,20 @@ source:
           # Uniao do que o projeto dbt declara como source com o que ele
           # produz. tests/test_openmetadata_packaging.py deriva a mesma lista
           # do projeto dbt e falha quando as duas divergem.
-          - '^agentes$'
           - '^ancine$'
           - '^bacen$'
           - '^bb_agil$'
           - '^bbagil$'
-          - '^bbagil_bronze$'
           - '^bronze$'
           - '^bsc$'
           - '^bsc_pnab$'
           - '^cotas$'
+          - '^cultura_em_numeros$'
           - '^dados_mapa_cultura$'
           - '^dados_salic$'
           - '^execucao_pnab$'
           - '^ibge_sidra$'
+          - '^intermediate$'
           - '^mapas$'
           - '^metadata$'
           - '^relatorio_gestao$'

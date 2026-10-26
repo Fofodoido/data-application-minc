@@ -1,6 +1,141 @@
 {
   "entregas": [
     {
+      "sha": "dd80ae9",
+      "autor": "Lucas Bottino",
+      "data": "2026-10-22",
+      "assunto": "feat(governanca): sugestão de descrição do OpenMetadata vira PR",
+      "tipo": "feat",
+      "escopo": "governanca",
+      "texto": "sugestão de descrição do OpenMetadata vira PR"
+    },
+    {
+      "sha": "8577ccc",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-21",
+      "assunto": "refactor(salic): a silver da Rouanet da Meta 5 passa a ler a ingestão v2",
+      "tipo": "refactor",
+      "escopo": "salic",
+      "texto": "a silver da Rouanet da Meta 5 passa a ler a ingestão v2"
+    },
+    {
+      "sha": "899e223",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-22",
+      "assunto": "fix(bbagil): codigo_programa e referencenumber passam a bigint na silver do extrato",
+      "tipo": "fix",
+      "escopo": "bbagil",
+      "texto": "codigo_programa e referencenumber passam a bigint na silver do extrato"
+    },
+    {
+      "sha": "dca95a3",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-22",
+      "assunto": "fix(dbt): valor nulo do BB Ágil volta a contar na Gold da Meta 5",
+      "tipo": "fix",
+      "escopo": "dbt",
+      "texto": "valor nulo do BB Ágil volta a contar na Gold da Meta 5"
+    },
+    {
+      "sha": "990b790",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-21",
+      "assunto": "refactor(dbt): estorno, só débito e status 'Pago' sobem para a Gold da Meta 5",
+      "tipo": "refactor",
+      "escopo": "dbt",
+      "texto": "estorno, só débito e status 'Pago' sobem para a Gold da Meta 5"
+    },
+    {
+      "sha": "829bb96",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-21",
+      "assunto": "fix(ancine): data inválida vira NULL em vez de derrubar a silver_consulta",
+      "tipo": "fix",
+      "escopo": "ancine",
+      "texto": "data inválida vira NULL em vez de derrubar a silver_consulta"
+    },
+    {
+      "sha": "78004a6",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-21",
+      "assunto": "refactor(dbt): regra de negócio da Meta 5 só na Gold e produtos em data_products/",
+      "tipo": "refactor",
+      "escopo": "dbt",
+      "texto": "regra de negócio da Meta 5 só na Gold e produtos em data_products/"
+    },
+    {
+      "sha": "c2c556d",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-21",
+      "assunto": "refactor(salic): a silver da Rouanet da Meta 5 passa a ler a ingestão v2",
+      "tipo": "refactor",
+      "escopo": "salic",
+      "texto": "a silver da Rouanet da Meta 5 passa a ler a ingestão v2"
+    },
+    {
+      "sha": "8d22d84",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-21",
+      "assunto": "refactor(docs): leitores da convenção de pastas acompanham a Meta 5 no ADR 0010",
+      "tipo": "refactor",
+      "escopo": "docs",
+      "texto": "leitores da convenção de pastas acompanham a Meta 5 no ADR 0010"
+    },
+    {
+      "sha": "c4adb84",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-21",
+      "assunto": "refactor(dbt): migra agentes_dbt e bbagil_bronze para a estrutura do ADR 0010",
+      "tipo": "refactor",
+      "escopo": "dbt",
+      "texto": "migra agentes_dbt e bbagil_bronze para a estrutura do ADR 0010"
+    },
+    {
+      "sha": "eca11e1",
+      "autor": "Wallyson Souza",
+      "data": "2026-10-08",
+      "assunto": "refactor(mapas): move as silvers para models/mapas, na estrutura do ADR 0010",
+      "tipo": "refactor",
+      "escopo": "mapas",
+      "texto": "move as silvers para models/mapas, na estrutura do ADR 0010"
+    },
+    {
+      "sha": "d35e2e5",
+      "autor": "Wallyson Souza",
+      "data": "2026-10-08",
+      "assunto": "fix(mapas): descarta value acima de 100 KB na silver_agent_meta",
+      "tipo": "fix",
+      "escopo": "mapas",
+      "texto": "descarta value acima de 100 KB na silver_agent_meta"
+    },
+    {
+      "sha": "1184ad4",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-07",
+      "assunto": "fix(inep): baixa a intermediária TLS conferida em vez de versionar o .pem",
+      "tipo": "fix",
+      "escopo": "inep",
+      "texto": "baixa a intermediária TLS conferida em vez de versionar o .pem"
+    },
+    {
+      "sha": "26b3bc7",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-07",
+      "assunto": "feat(inep): ingestão dos microdados do Censo Escolar, de 1995 a 2025",
+      "tipo": "feat",
+      "escopo": "inep",
+      "texto": "ingestão dos microdados do Censo Escolar, de 1995 a 2025"
+    },
+    {
+      "sha": "196fd88",
+      "autor": "Caio Melo Borges",
+      "data": "2026-10-07",
+      "assunto": "feat(datalakehouse): caminho particionado pelo dado e envio de arquivo em streaming",
+      "tipo": "feat",
+      "escopo": "datalakehouse",
+      "texto": "caminho particionado pelo dado e envio de arquivo em streaming"
+    },
+    {
       "sha": "2bbb7ab",
       "autor": "Caio Melo Borges",
       "data": "2026-10-07",
@@ -584,144 +719,51 @@
       "tipo": "refactor",
       "escopo": "",
       "texto": "migra extracao BB Agil de JSON local para Postgres raw + dbt"
-    },
-    {
-      "sha": "46500ac",
-      "autor": "Caio Melo Borges",
-      "data": "2026-07-09",
-      "assunto": "fix: corrige autenticação SCA, rotas BB Ágil e bugs de consolidação do fato_bbagil",
-      "tipo": "fix",
-      "escopo": "",
-      "texto": "corrige autenticação SCA, rotas BB Ágil e bugs de consolidação do fato_bbagil"
-    },
-    {
-      "sha": "7ff19a8",
-      "autor": "Caio Melo Borges",
-      "data": "2026-07-08",
-      "assunto": "feat:extração de dados bancários transferegov",
-      "tipo": "feat",
-      "escopo": "",
-      "texto": "extração de dados bancários transferegov"
-    },
-    {
-      "sha": "cf0893d",
-      "autor": "devwallyson",
-      "data": "2026-07-01",
-      "assunto": "fix: ajusta valores do dbt project",
-      "tipo": "fix",
-      "escopo": "",
-      "texto": "ajusta valores do dbt project"
-    },
-    {
-      "sha": "a8439b4",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-18",
-      "assunto": "fix: resolve conflito de dependencias no pyproject.toml",
-      "tipo": "fix",
-      "escopo": "",
-      "texto": "resolve conflito de dependencias no pyproject.toml"
-    },
-    {
-      "sha": "128b9aa",
-      "autor": "arthrok",
-      "data": "2026-06-18",
-      "assunto": "refactor: atualiza ci/cd para nova estrutura",
-      "tipo": "refactor",
-      "escopo": "",
-      "texto": "atualiza ci/cd para nova estrutura"
-    },
-    {
-      "sha": "4d4fe1f",
-      "autor": "arthrok",
-      "data": "2026-06-18",
-      "assunto": "refactor: atualiza ci/cd para nova estrutura",
-      "tipo": "refactor",
-      "escopo": "",
-      "texto": "atualiza ci/cd para nova estrutura"
-    },
-    {
-      "sha": "8644c4f",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-17",
-      "assunto": "fix(meta5): corrige falso negativo de contemplados na LPG",
-      "tipo": "fix",
-      "escopo": "meta5",
-      "texto": "corrige falso negativo de contemplados na LPG"
-    },
-    {
-      "sha": "f47b41c",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-16",
-      "assunto": "feat(meta5): implementa inferência de veterania, resolve lock concorrente no banco e barra nulos nos modelos incrementais",
-      "tipo": "feat",
-      "escopo": "meta5",
-      "texto": "implementa inferência de veterania, resolve lock concorrente no banco e barra nulos nos modelos incrementais"
-    },
-    {
-      "sha": "a8fccdc",
-      "autor": "arthrok",
-      "data": "2026-06-15",
-      "assunto": "refactor: adapta as dags pro bump de versão 2.8.1 -> 3.2.2",
-      "tipo": "refactor",
-      "escopo": "",
-      "texto": "adapta as dags pro bump de versão 2.8.1 -> 3.2.2"
-    },
-    {
-      "sha": "8b9aede",
-      "autor": "arthrok",
-      "data": "2026-06-14",
-      "assunto": "refactor: altera estrutura de pastas do projeto",
-      "tipo": "refactor",
-      "escopo": "",
-      "texto": "altera estrutura de pastas do projeto"
-    },
-    {
-      "sha": "4cc16e1",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-11",
-      "assunto": "fix(cosmos): adiciona fallback nas env_vars do profiles.yml para corrigir parsing da DAG",
-      "tipo": "fix",
-      "escopo": "cosmos",
-      "texto": "adiciona fallback nas env_vars do profiles.yml para corrigir parsing da DAG"
-    },
-    {
-      "sha": "b6b5cdd",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-11",
-      "assunto": "refactor: refatora env.example para conexão com o banco para o dbt",
-      "tipo": "refactor",
-      "escopo": "",
-      "texto": "refatora env.example para conexão com o banco para o dbt"
-    },
-    {
-      "sha": "83ac9e6",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-11",
-      "assunto": "feat(analytics): unifica dados de proponentes LPG e PNAB para Meta 5",
-      "tipo": "feat",
-      "escopo": "analytics",
-      "texto": "unifica dados de proponentes LPG e PNAB para Meta 5"
-    },
-    {
-      "sha": "230960c",
-      "autor": "Caio Melo Borges",
-      "data": "2026-06-09",
-      "assunto": "feat: adiciona pipeline dbt para meta 5 de agentes (bronze a gold)",
-      "tipo": "feat",
-      "escopo": "",
-      "texto": "adiciona pipeline dbt para meta 5 de agentes (bronze a gold)"
-    },
-    {
-      "sha": "4236a4e",
-      "autor": "Caio Melo Borges",
-      "data": "2026-04-13",
-      "assunto": "refactor(minc): implementa orquestracao em cascata com triggerdagrun",
-      "tipo": "refactor",
-      "escopo": "minc",
-      "texto": "implementa orquestracao em cascata com triggerdagrun"
     }
   ],
   "pull_requests": [
+    {
+      "numero": 91,
+      "titulo": "feat(governanca): sugestão de descrição do OpenMetadata vira PR",
+      "autor": "bottinolucas",
+      "data": "2026-10-22",
+      "linhas": 688
+    },
+    {
+      "numero": 89,
+      "titulo": "refactor(salic): a silver da Rouanet da Meta 5 passa a ler a ingestão v2",
+      "autor": "CaioMelo25",
+      "data": "2026-10-22",
+      "linhas": 799
+    },
+    {
+      "numero": 87,
+      "titulo": "refactor(dbt): migra a Meta 5 (agentes_dbt e bbagil_bronze) para a estrutura do ADR 0010",
+      "autor": "CaioMelo25",
+      "data": "2026-10-22",
+      "linhas": 8242
+    },
+    {
+      "numero": 82,
+      "titulo": "refactor(mapas): move as silvers para models/mapas, na estrutura do ADR 0010",
+      "autor": "devwallyson",
+      "data": "2026-10-08",
+      "linhas": 290
+    },
+    {
+      "numero": 81,
+      "titulo": "fix(mapas): descarta value acima de 100 KB na silver_agent_meta",
+      "autor": "devwallyson",
+      "data": "2026-10-08",
+      "linhas": 16
+    },
+    {
+      "numero": 80,
+      "titulo": "feat(inep): ingestão dos microdados do Censo Escolar, de 1995 a 2025",
+      "autor": "CaioMelo25",
+      "data": "2026-10-07",
+      "linhas": 1257
+    },
     {
       "numero": 74,
       "titulo": "fix(cosmos): desliga install_dbt_deps e corta 94% do log de task",
@@ -1066,25 +1108,25 @@
     "2026-07": 11,
     "2026-08": 35,
     "2026-09": 13,
-    "2026-10": 9
+    "2026-10": 24
   },
   "autores": {
-    "Caio Melo Borges": 47,
+    "Caio Melo Borges": 72,
     "Davi de Aguiar Vieira": 36,
     "davi-aguiar-vieira": 36,
     "Tiago Santos Bittencourt": 22,
     "ananunesv": 21,
+    "Wallyson Souza": 20,
     "arthrok": 20,
     "VictorSzk": 20,
     "Joyce Dionizio": 19,
-    "Wallyson Souza": 18,
     "mat054": 18,
     "Joyce": 17,
     "dependabot[bot]": 15,
     "Tiago Bittencourt": 10,
     "Mateushqms": 10,
+    "Lucas Bottino": 8,
     "Mateus de Castro": 8,
-    "Lucas Bottino": 7,
     "LuizaMaluf": 6,
     "MatDias97": 6,
     "Luiza Maluf": 5,
@@ -1109,10 +1151,10 @@
     "pedro.rossi1": 1
   },
   "totais": {
-    "commits": 383,
-    "entregas": 221,
-    "pull_requests": 46,
+    "commits": 411,
+    "entregas": 236,
+    "pull_requests": 52,
     "primeiro_commit": "2024-12-12",
-    "ultimo_commit": "2026-10-07"
+    "ultimo_commit": "2026-10-22"
   }
 }

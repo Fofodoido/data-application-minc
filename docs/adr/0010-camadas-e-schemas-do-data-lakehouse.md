@@ -1,7 +1,11 @@
 # ADR 0010 — Cinco camadas, schema por fonte até a Intermediate e um schema por produto na Gold
 
 - **Data:** 2026-10-06
-- **Status:** aceito
+- **Status:** aceito; partes substituídas pelo
+  [ADR 0015](0015-produtos-em-data-products-e-gold-lendo-gold.md): a pasta
+  dos produtos, o nome da Intermediate, a definição de regra de negócio
+  (regra 3) e o que a Gold pode ler (regra 5). Onde os dois divergem, vale o
+  0015.
 - **Escopo:** camadas, schemas e nomenclatura do projeto dbt e das DAGs
 - **Desenho:** [`docs/arquitetura/modelagem-dados-minc.png`](../arquitetura/modelagem-dados-minc.png)
 - **Complementa:** [ADR 0009](0009-data-lakehouse-extracao-airflow-camadas-minio-acesso-trino.md)

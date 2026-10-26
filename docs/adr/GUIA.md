@@ -5,7 +5,21 @@ querer entender antes de desfazer. Cada uma registra o contexto, a decisão, o
 motivo, o que foi descartado e o que ficou de consequência.
 
 Um ADR não se edita depois de aceito — se a decisão mudar, escreve-se um novo
-que a substitui, e o antigo passa a `Status: substituído por ADR NNNN`.
+que a substitui, e o antigo passa a `Status: substituído por ADR NNNN`. Se o
+novo substitui só uma parte, o antigo passa a `Status: aceito; partes
+substituídas pelo ADR NNNN`, dizendo quais. A linha de status é a única
+coisa que se muda num ADR aceito.
+
+Um ADR novo entra com `Status: proposto`. Ele passa a `aceito` só quando o PR
+for aprovado por alguém que não é o autor, e a troca do status vai no próprio
+PR, antes do merge.
+
+Mudar a regra do projeto dbt e mudar os modelos são dois PRs. Se um modelo
+precisa de uma regra nova, o PR do ADR entra primeiro e o do modelo depois. O
+CI recusa o PR que muda um ADR ou o `verificar.py` da skill
+`arquitetura-lakehouse-minc` junto com `dbt/minc/models/`
+(`scripts/checar_regra_e_codigo.py`). ADR de ingestão pode entrar junto com o
+código da DAG.
 
 | # | Decisão |
 |---|---|
@@ -21,6 +35,8 @@ que a substitui, e o antigo passa a `Status: substituído por ADR NNNN`.
 | [0010](0010-camadas-e-schemas-do-data-lakehouse.md) | Cinco camadas, schema por fonte até a Intermediate e um schema por produto na Gold |
 | [0011](0011-transferegov-grava-no-datalakehouse.md) | A ingestão do TransfereGov grava no datalakehouse, e uma ponte devolve ao Postgres |
 | [0012](0012-fontes-estaticas-no-schema-seeds.md) | Fonte estática vai de raw a Parquet no MinIO e chega ao Postgres no schema `seeds` |
+| [0014](0014-siconfi-grava-so-o-raw-e-controla-pelo-trino.md) | A ingestão do SICONFI grava só o raw no MinIO e controla a fila pelo Trino |
+| [0015](0015-produtos-em-data-products-e-gold-lendo-gold.md) | Produtos em `data_products/`, Intermediate nomeada pelas fontes, Gold lendo Gold do mesmo produto e o que é regra de negócio (substitui partes do 0010) |
 
 Para escrever um novo, existe a skill
 [`architecture-decision-records`](../../.claude/skills/architecture-decision-records/).
