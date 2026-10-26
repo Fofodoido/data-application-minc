@@ -1,6 +1,24 @@
 {
   "entregas": [
     {
+      "sha": "34b0bb6",
+      "autor": "ananunesv",
+      "data": "2026-10-26",
+      "assunto": "fix(siconfi): planejamento lê a fila uma vez por endpoint e recorte vazio não quebra a fila",
+      "tipo": "fix",
+      "escopo": "siconfi",
+      "texto": "planejamento lê a fila uma vez por endpoint e recorte vazio não quebra a fila"
+    },
+    {
+      "sha": "646ec30",
+      "autor": "ananunesv",
+      "data": "2026-10-26",
+      "assunto": "fix(siconfi): controle sem system.query nem system.execute, negados pelo Trino do servidor",
+      "tipo": "fix",
+      "escopo": "siconfi",
+      "texto": "controle sem system.query nem system.execute, negados pelo Trino do servidor"
+    },
+    {
       "sha": "5bb3b00",
       "autor": "ananunesv",
       "data": "2026-10-22",
@@ -701,24 +719,6 @@
       "tipo": "fix",
       "escopo": "",
       "texto": "aumenta retries da extracao BB Agil pra sobreviver bloqueio periodico do BSC"
-    },
-    {
-      "sha": "9be2533",
-      "autor": "Caio Melo Borges",
-      "data": "2026-07-15",
-      "assunto": "perf: cacheia descoberta de agencia/conta ja conhecida, nao rebusca tudo",
-      "tipo": "perf",
-      "escopo": "",
-      "texto": "cacheia descoberta de agencia/conta ja conhecida, nao rebusca tudo"
-    },
-    {
-      "sha": "dc61c35",
-      "autor": "Caio Melo Borges",
-      "data": "2026-07-15",
-      "assunto": "fix: persiste extracao BB Agil em lotes, nao so no final",
-      "tipo": "fix",
-      "escopo": "",
-      "texto": "persiste extracao BB Agil em lotes, nao so no final"
     }
   ],
   "pull_requests": [
@@ -1129,13 +1129,13 @@
     "2026-07": 11,
     "2026-08": 35,
     "2026-09": 13,
-    "2026-10": 26
+    "2026-10": 28
   },
   "autores": {
     "Caio Melo Borges": 72,
     "Davi de Aguiar Vieira": 36,
     "davi-aguiar-vieira": 36,
-    "ananunesv": 26,
+    "ananunesv": 28,
     "Tiago Santos Bittencourt": 22,
     "Wallyson Souza": 20,
     "arthrok": 20,
@@ -1172,8 +1172,8 @@
     "pedro.rossi1": 1
   },
   "totais": {
-    "commits": 417,
-    "entregas": 238,
+    "commits": 419,
+    "entregas": 240,
     "pull_requests": 55,
     "primeiro_commit": "2024-12-12",
     "ultimo_commit": "2026-10-26"

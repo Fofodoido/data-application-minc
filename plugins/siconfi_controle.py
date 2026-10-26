@@ -18,24 +18,28 @@ Tudo é **só inserção**. O Trino não tem ``FOR UPDATE SKIP LOCKED`` nem
 
 Sem trava de linha, a garantia de que duas tasks não processam a mesma unidade
 vem da DAG: uma task por endpoint, um run por vez e uma task por vez
-(``max_active_tasks=1``). As leituras que precisam de ``DISTINCT ON`` saem pela
-table function ``system.query`` do conector, que executa SQL nativo no Postgres.
+(``max_active_tasks=1``).
 
-O ``CREATE TABLE`` do Trino não cria índice. Os índices que essas leituras usam
-são criados pela procedure ``system.execute`` do conector, que repassa o
-``CREATE INDEX`` ao Postgres -- também pelo Trino, sem ``psycopg2``. Sem eles,
-cada consulta da fila e cada lote do planejamento varrem a tabela inteira, e
-``siconfi_work_events`` só cresce.
+Todo o SQL é do Trino. A table function ``system.query`` e a procedure
+``system.execute`` do conector, que mandariam SQL nativo ao Postgres, ficam de
+fora: o Trino do servidor nega as duas ao usuário do Airflow (``Access Denied``,
+26/10/2026). A versão vigente de cada unidade e o último evento de cada revisão
+saem de ``row_number()``, calculado no Trino; o filtro por endpoint
+e por chave desce ao Postgres. Pelo mesmo motivo a DAG não cria índice: o ADR
+0014 traz o ``CREATE INDEX`` para quem administra o banco, se a fila ficar lenta.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from cliente_siconfi import request_hash
-from trino_bronze import passthrough, quote_ident, quote_pg_ident, sql_literal
+from trino_bronze import quote_ident, sql_literal
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CATALOG = "dw"
 DEFAULT_SCHEMA = "control"
@@ -64,15 +68,6 @@ _DDL = {
     PLAN_KEYS: """(
         source varchar, scope_hash varchar, key varchar,
         planned_at timestamp(6) with time zone)""",
-}
-# Um índice por consulta: a unidade vigente por chave (``DISTINCT ON (work_key)
-# ... ORDER BY work_key, planned_at DESC``), o último evento por revisão, os
-# arquivos já planejados por recorte e o último refresh de cada referência.
-_INDICES = {
-    UNITS: "(endpoint, work_key, planned_at DESC)",
-    EVENTS: "(endpoint, work_key, revision_marker, event_at DESC)",
-    PLAN_KEYS: "(source, scope_hash)",
-    REFERENCE: "(endpoint, refreshed_at DESC)",
 }
 
 
@@ -113,7 +108,7 @@ CONTROL_SCHEMA_VAR = "siconfi_trino_control_schema"
 def controle_do_airflow(garantir_tabelas: bool = False) -> SiconfiControle:
     """O controle com o catálogo e o schema das Variables.
 
-    ``garantir_tabelas`` cria o schema, as tabelas e os índices. Cada DAG faz isso
+    ``garantir_tabelas`` cria o schema e as tabelas. Cada DAG faz isso
     uma vez por run, numa task própria antes das outras, e não em cada task.
     """
     from airflow.sdk import Variable
@@ -132,7 +127,7 @@ def controle_do_airflow(garantir_tabelas: bool = False) -> SiconfiControle:
 
 
 def texto(valor: str | None) -> str:
-    """Literal de texto para o Trino (e para o SQL nativo do Postgres)."""
+    """Literal de texto para o Trino."""
     return "CAST(NULL AS varchar)" if valor is None else sql_literal(valor)
 
 
@@ -144,8 +139,9 @@ def instante(quando: datetime | None) -> str:
     return f"TIMESTAMP '{utc} UTC'"
 
 
-def _array_pg(valores: Iterable[str]) -> str:
-    return "ARRAY[" + ", ".join(sql_literal(v) for v in valores) + "]::text[]"
+def _lista(valores: Iterable[str]) -> str:
+    """``('a', 'b')`` para um ``IN`` do Trino."""
+    return "(" + ", ".join(sql_literal(v) for v in valores) + ")"
 
 
 def params_json(params: Mapping[str, Any]) -> str:
@@ -165,16 +161,28 @@ class SiconfiControle:
         self.executor = executor
         self.catalog = catalog
         self.schema = schema
+        # Revisão vigente de cada chave, por endpoint: lida uma vez por instância
+        # (uma por task) e atualizada a cada inserção do ``enqueue_many``.
+        self._revisoes: dict[str, dict[str, str | None]] = {}
 
-    # nomes: completo no Trino, e só schema.tabela no SQL nativo do Postgres
     def _t(self, tabela: str) -> str:
         return f"{quote_ident(self.catalog)}.{quote_ident(self.schema)}.{tabela}"
 
-    def _pg(self, tabela: str) -> str:
-        return f"{quote_pg_ident(self.schema)}.{tabela}"
+    def _vigentes(self, where: str, colunas: str, por: str) -> str:
+        """Unidades na revisão vigente: a linha mais recente de cada chave."""
+        return f"""SELECT {colunas} FROM (
+                SELECT *, row_number() OVER (
+                    PARTITION BY {por} ORDER BY planned_at DESC) AS n
+                FROM {self._t(UNITS)} WHERE {where}
+            ) WHERE n = 1"""
 
-    def _nativo(self, sql: str) -> list[Sequence[Any]]:
-        return self.executor.records(passthrough(quote_ident(self.catalog), sql))
+    def _ultimos_eventos(self, where: str, colunas: str, por: str) -> str:
+        """O evento mais recente de cada revisão (``NULL`` é uma revisão)."""
+        return f"""SELECT {colunas} FROM (
+                SELECT *, row_number() OVER (
+                    PARTITION BY {por}, revision_marker ORDER BY event_at DESC) AS n
+                FROM {self._t(EVENTS)} WHERE {where}
+            ) WHERE n = 1"""
 
     def _insert(self, tabela: str, colunas: str, linhas: list[str]) -> None:
         for inicio in range(0, len(linhas), _CHUNK):
@@ -183,42 +191,54 @@ class SiconfiControle:
                 + ", ".join(linhas[inicio : inicio + _CHUNK])
             )
 
-    def verificar_conector(self) -> None:
-        """Falha cedo, e com o motivo, se o catálogo não tem o que o controle usa.
+    def verificar_catalogo(self) -> None:
+        """Falha cedo, e dizendo onde mexer, se o catálogo não existe no Trino.
 
-        As leituras saem pela table function ``system.query`` e os índices, pela
-        procedure ``system.execute``: as duas dependem da versão do conector
-        PostgreSQL do Trino.
+        O nome padrão (``dw``) é o do ambiente local; no servidor o catálogo do
+        banco tem outro nome, dado pela Variable.
         """
         try:
-            self._nativo("SELECT 1")
+            self.executor.records(f"SHOW SCHEMAS FROM {quote_ident(self.catalog)}")
         except Exception as exc:
             raise RuntimeError(
-                f"o catálogo {self.catalog!r} do Trino não respondeu à table function "
-                "system.query. O controle do SICONFI precisa de um conector "
-                "PostgreSQL com system.query e system.execute (medido no Trino "
-                f"478). Erro original: {exc}"
+                f"o Trino não abriu o catálogo {self.catalog!r}. Confira a Variable "
+                f"{TARGET_CATALOG_VAR}: ela deve ter o nome do catálogo do banco "
+                f"no Trino deste ambiente. Erro original: {exc}"
             ) from exc
+        # O padrão ``dw`` é o nome local: se um dia existir um ``dw`` no servidor,
+        # é por esta linha do log que se vê onde o controle está gravando.
+        logger.info("[siconfi] controle em %s.%s", self.catalog, self.schema)
 
     def ensure_tables(self) -> None:
-        self.verificar_conector()
+        self.verificar_catalogo()
         self.executor.run(
             f"CREATE SCHEMA IF NOT EXISTS "
             f"{quote_ident(self.catalog)}.{quote_ident(self.schema)}"
         )
         for tabela, colunas in _DDL.items():
             self.executor.run(f"CREATE TABLE IF NOT EXISTS {self._t(tabela)} {colunas}")
-        for tabela, colunas in _INDICES.items():
-            self.executor.run(
-                f"CALL {quote_ident(self.catalog)}.system.execute(query => "
-                + sql_literal(
-                    f"CREATE INDEX IF NOT EXISTS {tabela}_busca_idx "
-                    f"ON {self._pg(tabela)} {colunas}"
-                )
-                + ")"
-            )
 
     # ── fila ─────────────────────────────────────────────────────────────
+
+    def _revisoes_vigentes(self, endpoint: str) -> dict[str, str | None]:
+        """Chave → revisão vigente das unidades de ``endpoint``.
+
+        Uma varredura do endpoint em vez de uma consulta por lote de chaves: sem
+        índice (a DAG não cria), cada consulta varreria a tabela no Postgres, e o
+        planejamento reenfileira todos os entes × anos a cada run.
+        """
+        if endpoint not in self._revisoes:
+            self._revisoes[endpoint] = {
+                str(row[0]): row[1]
+                for row in self.executor.records(
+                    self._vigentes(
+                        f"endpoint = {sql_literal(endpoint)}",
+                        "work_key, revision_marker",
+                        "work_key",
+                    )
+                )
+            }
+        return self._revisoes[endpoint]
 
     def enqueue_many(
         self, endpoint: str, units: Iterable[tuple[dict[str, Any], str | None]]
@@ -231,34 +251,24 @@ class SiconfiControle:
         planejadas: dict[str, tuple[str, str | None]] = {}
         for params, revision in units:
             planejadas[request_hash(endpoint, params)] = (params_json(params), revision)
-        agora = datetime.now(timezone.utc)
-        chaves = list(planejadas)
-        entraram = 0
-        for inicio in range(0, len(chaves), _CHUNK):
-            lote = chaves[inicio : inicio + _CHUNK]
-            vigentes = {
-                row[0]: row[1]
-                for row in self._nativo(
-                    f"SELECT DISTINCT ON (work_key) work_key, revision_marker "
-                    f"FROM {self._pg(UNITS)} WHERE endpoint = {sql_literal(endpoint)} "
-                    f"AND work_key = ANY({_array_pg(lote)}) "
-                    f"ORDER BY work_key, planned_at DESC"
-                )
-            }
-            novas = [
-                k for k in lote if k not in vigentes or vigentes[k] != planejadas[k][1]
-            ]
-            self._insert(
-                UNITS,
-                "endpoint, work_key, params, revision_marker, planned_at",
-                [
-                    f"({texto(endpoint)}, {texto(k)}, {texto(planejadas[k][0])}, "
-                    f"{texto(planejadas[k][1])}, {instante(agora)})"
-                    for k in novas
-                ],
-            )
-            entraram += len(novas)
-        return entraram
+        vigentes = self._revisoes_vigentes(endpoint)
+        novas = [
+            k
+            for k, (_, revisao) in planejadas.items()
+            if k not in vigentes or vigentes[k] != revisao
+        ]
+        agora = instante(datetime.now(timezone.utc))
+        self._insert(
+            UNITS,
+            "endpoint, work_key, params, revision_marker, planned_at",
+            [
+                f"({texto(endpoint)}, {texto(k)}, {texto(planejadas[k][0])}, "
+                f"{texto(planejadas[k][1])}, {agora})"
+                for k in novas
+            ],
+        )
+        vigentes.update((k, planejadas[k][1]) for k in novas)
+        return len(novas)
 
     def pending(
         self,
@@ -270,29 +280,34 @@ class SiconfiControle:
 
         ``retry`` volta a ser pendente depois de ``next_attempt_at``.
         """
+        permitidos = {
+            chave: sorted(str(v) for v in valores)
+            for chave, valores in (param_filter or {}).items()
+        }
+        if any(not valores for valores in permitidos.values()):
+            # Um recorte vazio (``"msc_months": []`` na Variable) não deixa
+            # passar nada; e ``IN ()`` é erro de sintaxe no Trino.
+            return []
         filtros = "".join(
-            f" AND (u.params::jsonb ->> {sql_literal(chave)}) = "
-            f"ANY({_array_pg(sorted(str(v) for v in valores))})"
-            for chave, valores in sorted((param_filter or {}).items())
+            f" AND json_extract_scalar(u.params, {sql_literal('$.' + chave)}) IN "
+            f"{_lista(valores)}"
+            for chave, valores in sorted(permitidos.items())
         )
-        e = sql_literal(endpoint)
-        rows = self._nativo(
+        e = f"endpoint = {sql_literal(endpoint)}"
+        rows = self.executor.records(
             f"""WITH u AS (
-                SELECT DISTINCT ON (work_key) work_key, params, revision_marker,
-                       planned_at
-                FROM {self._pg(UNITS)} WHERE endpoint = {e}
-                ORDER BY work_key, planned_at DESC
-            ), e AS (
-                SELECT DISTINCT ON (work_key, revision_marker) work_key,
-                       revision_marker, status, next_attempt_at
-                FROM {self._pg(EVENTS)} WHERE endpoint = {e}
-                ORDER BY work_key, revision_marker, event_at DESC
+                {self._vigentes(e, "work_key, params, revision_marker, planned_at",
+                                "work_key")}
+            ), ev AS (
+                {self._ultimos_eventos(e, "work_key, revision_marker, status, "
+                                          "next_attempt_at", "work_key")}
             )
             SELECT u.work_key, u.params, u.revision_marker
-            FROM u LEFT JOIN e ON e.work_key = u.work_key
-             AND e.revision_marker IS NOT DISTINCT FROM u.revision_marker
-            WHERE (e.status IS NULL OR (e.status = 'retry'
-                   AND (e.next_attempt_at IS NULL OR e.next_attempt_at <= now())))
+            FROM u LEFT JOIN ev ON ev.work_key = u.work_key
+             AND ev.revision_marker IS NOT DISTINCT FROM u.revision_marker
+            WHERE (ev.status IS NULL OR (ev.status = 'retry'
+                   AND (ev.next_attempt_at IS NULL
+                        OR ev.next_attempt_at <= current_timestamp)))
             {filtros}
             ORDER BY u.planned_at, u.work_key
             LIMIT {int(limit)}"""
@@ -342,20 +357,18 @@ class SiconfiControle:
 
     def latest_status_counts(self) -> dict[str, int]:
         """Unidades por estado vigente: ``pending`` quando não há evento final."""
-        rows = self._nativo(
+        rows = self.executor.records(
             f"""WITH u AS (
-                SELECT DISTINCT ON (endpoint, work_key) endpoint, work_key,
-                       revision_marker
-                FROM {self._pg(UNITS)} ORDER BY endpoint, work_key, planned_at DESC
-            ), e AS (
-                SELECT DISTINCT ON (endpoint, work_key, revision_marker) endpoint,
-                       work_key, revision_marker, status
-                FROM {self._pg(EVENTS)}
-                ORDER BY endpoint, work_key, revision_marker, event_at DESC
+                {self._vigentes("true", "endpoint, work_key, revision_marker",
+                                "endpoint, work_key")}
+            ), ev AS (
+                {self._ultimos_eventos("true", "endpoint, work_key, revision_marker, "
+                                               "status", "endpoint, work_key")}
             )
-            SELECT coalesce(e.status, 'pending'), count(*)
-            FROM u LEFT JOIN e ON e.endpoint = u.endpoint AND e.work_key = u.work_key
-             AND e.revision_marker IS NOT DISTINCT FROM u.revision_marker
+            SELECT coalesce(ev.status, 'pending'), count(*)
+            FROM u LEFT JOIN ev ON ev.endpoint = u.endpoint
+             AND ev.work_key = u.work_key
+             AND ev.revision_marker IS NOT DISTINCT FROM u.revision_marker
             GROUP BY 1"""
         )
         return {str(status): int(n) for status, n in rows}

@@ -293,7 +293,7 @@ def _anunciar(endpoint: str) -> str:
 
 @task
 def preparar_controle() -> None:
-    """Confere o conector e garante tabelas e índices, uma vez por run."""
+    """Confere o catálogo e garante as tabelas do controle, uma vez por run."""
     controle_do_airflow(garantir_tabelas=True)
 
 
