@@ -69,7 +69,7 @@ def _metadados(pasta: Path) -> dict[str, dict[str, Any]]:
     for modelo in dados.get("models") or []:
         if not isinstance(modelo, dict) or not modelo.get("name"):
             continue
-        colunas = modelo.get("columns") or []
+        colunas = [c for c in modelo.get("columns") or [] if isinstance(c, dict)]
         testes = len(modelo.get("tests") or modelo.get("data_tests") or [])
         for coluna in colunas:
             testes += len(coluna.get("tests") or coluna.get("data_tests") or [])
@@ -81,7 +81,6 @@ def _metadados(pasta: Path) -> dict[str, dict[str, Any]]:
                     "descricao": (c.get("description") or "").strip(),
                 }
                 for c in colunas
-                if isinstance(c, dict)
             ],
             "testes": testes,
         }
