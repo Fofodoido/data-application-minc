@@ -1,0 +1,6 @@
+# Decisões de arquitetura e as skills que as aplicam precisam da aprovação de
+# quem responde pela arquitetura (docs/adr/GUIA.md). Só vale com "Require
+# review from Code Owners" ligado na proteção da branch main.
+/docs/adr/        @LuizaMaluf
+/.claude/skills/  @LuizaMaluf
+/.github/CODEOWNERS @LuizaMaluf
