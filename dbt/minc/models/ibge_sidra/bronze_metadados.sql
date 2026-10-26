@@ -2,4 +2,4 @@
 -- grava.
 -- Sem cast, filtro nem join (ADR 0010): tudo continua text. Quem tipa é
 -- silver_metadados.
-select * from {{ source("ibge_sidra", "metadados") }}
+select * from {{ source("ibge_sidra", "metadados") }}  -- noqa: AM04

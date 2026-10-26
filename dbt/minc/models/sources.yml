@@ -2948,13 +2948,14 @@ sources:
   - name: ibge_sidra
     schema: ibge_sidra
     description: >
-      Agregados, localidades e metadados do SIDRA/IBGE, ingeridos pela DAG
-      ibge_agregados_dag. Usados como referencia territorial e de indicador nos modelos de
-      cotas e de perfil.
+      Catálogo do SIDRA/IBGE (pesquisas, agregados, metadados, períodos e
+      localidades), como a ibge_agregados_dag grava a partir da API de
+      Agregados v3. Lido pelos modelos de models/ibge_sidra/.
     tables:
       - name: agregados_catalogo
         description: >
-          [NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 4 colunas.
+          Catálogo das tabelas (agregados) do SIDRA: uma linha por agregado, com a
+          pesquisa do IBGE a que pertence. GET /agregados achatado. Tudo text.
         meta:
           openmetadata:
             domain: Cultura.Indicadores
@@ -3000,7 +3001,9 @@ sources:
               - not_null   # inferido do perfil do banco
       - name: localidades
         description: >
-          [NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 4 colunas.
+          Localidades em que cada agregado tem dado: uma linha por agregado e
+          localidade. Só o nível N3 (UF), que é o que a DAG pede; `nivel` vem em
+          JSON. GET /agregados/{id}/localidades/N3. Tudo text.
         meta:
           openmetadata:
             domain: Cultura.Indicadores
@@ -3047,7 +3050,9 @@ sources:
               - not_null   # inferido do perfil do banco
       - name: metadados
         description: >
-          [NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 10 colunas.
+          Metadados de cada agregado: uma linha por agregado, com pesquisa,
+          assunto, periodicidade, níveis territoriais, variáveis e classificações
+          (os quatro últimos em JSON). GET /agregados/{id}/metadados. Tudo text.
         meta:
           openmetadata:
             domain: Cultura.Indicadores
@@ -3143,7 +3148,8 @@ sources:
               - not_null   # inferido do perfil do banco
       - name: periodos
         description: >
-          [NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 4 colunas.
+          Períodos disponíveis em cada agregado: uma linha por agregado e período
+          (ano ou ano com mês/trimestre). GET /agregados/{id}/periodos. Tudo text.
         meta:
           openmetadata:
             domain: Cultura.Indicadores
@@ -3184,7 +3190,8 @@ sources:
               - not_null   # inferido do perfil do banco
       - name: pesquisas
         description: >
-          [NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 3 colunas.
+          Pesquisas do IBGE com tabelas no SIDRA: uma linha por pesquisa, com a
+          lista dos seus agregados em JSON. GET /agregados. Tudo text.
         meta:
           openmetadata:
             domain: Cultura.Indicadores

@@ -14,7 +14,7 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier3
         owner: minc-data-engineering
 
   - name: bronze_localidades
@@ -28,7 +28,7 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier3
         owner: minc-data-engineering
 
   - name: bronze_metadados
@@ -42,7 +42,7 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier3
         owner: minc-data-engineering
 
   - name: bronze_periodos
@@ -56,7 +56,7 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier3
         owner: minc-data-engineering
 
   - name: bronze_pesquisas
@@ -70,12 +70,15 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier3
         owner: minc-data-engineering
 
   - name: silver_agregados_catalogo
     description: >
-      Camada silver tipada de ibge_sidra.agregados_catalogo, lida de bronze_agregados_catalogo. 4 colunas, 1 com cast aplicado.
+      Catálogo das tabelas (agregados) publicadas no SIDRA, o banco de tabelas do
+      IBGE, tipado. Uma linha por agregado (`id`), com a pesquisa a que ele
+      pertence. Vem do GET /agregados da API de Agregados v3, achatado pela
+      ibge_agregados_dag. Lida de bronze_agregados_catalogo.
     config:
       tags:
         - silver
@@ -83,16 +86,17 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier2
         owner: minc-data-engineering
     columns:
       - name: id
         description: >
-          Tipagem: 100% dos 9298 valores casam com inteiro.
+          Código do agregado (a "tabela" do SIDRA). Chave da tabela e o mesmo
+          código usado em agregado_id nas outras tabelas do schema.
         data_type: integer
       - name: nome
         description: >
-          Tipagem: valores heterogeneos.
+          Título do agregado, como o IBGE publica.
         data_type: text
         meta:
           openmetadata:
@@ -100,16 +104,21 @@ models:
               - PII.NonSensitive
       - name: pesquisa_id
         description: >
-          Tipagem: valores heterogeneos.
+          Código de duas letras da pesquisa do IBGE a que o agregado pertence.
+          Liga com silver_pesquisas.id.
         data_type: text
       - name: pesquisa_nome
         description: >
-          Tipagem: valores heterogeneos.
+          Nome da pesquisa do IBGE a que o agregado pertence.
         data_type: text
 
   - name: silver_localidades
     description: >
-      Camada silver tipada de ibge_sidra.localidades, lida de bronze_localidades. 4 colunas, 2 com cast aplicado.
+      Localidades em que cada agregado do SIDRA tem dado, tipadas. Uma linha por
+      agregado e localidade (`agregado_id` + `id`). Vem do GET
+      /agregados/{id}/localidades/{nivel}; a ibge_agregados_dag só pede o nível
+      N3 (Unidade da Federação), então `id` é sempre o código de UF do IBGE.
+      Agregado sem recorte por UF não aparece. Lida de bronze_localidades.
     config:
       tags:
         - silver
@@ -117,24 +126,25 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier2
         owner: minc-data-engineering
     columns:
       - name: agregado_id
         description: >
-          Tipagem: 100% dos 222862 valores casam com inteiro.
+          Código do agregado do SIDRA. Liga com silver_agregados_catalogo.id.
         data_type: integer
       - name: nivel
         description: >
-          Tipagem: coluna constante.
+          Nível geográfico da localidade, em JSON como a API devolve (id e nome
+          do nível). Hoje é sempre N3, Unidade da Federação.
         data_type: text
       - name: id
         description: >
-          Tipagem: 100% dos 222862 valores casam com inteiro.
+          Código IBGE da localidade. No nível N3, o código de dois dígitos da UF.
         data_type: integer
       - name: nome
         description: >
-          Tipagem: valores heterogeneos.
+          Nome da localidade (no nível N3, o nome da UF).
         data_type: text
         meta:
           openmetadata:
@@ -143,7 +153,11 @@ models:
 
   - name: silver_metadados
     description: >
-      Camada silver tipada de ibge_sidra.metadados, lida de bronze_metadados. 10 colunas, 2 com cast aplicado.
+      Metadados de cada agregado do SIDRA, tipados: pesquisa, assunto,
+      periodicidade, níveis territoriais, variáveis e classificações. Uma linha
+      por agregado. Vem do GET /agregados/{id}/metadados; os campos que a API
+      devolve como lista ou objeto chegam como texto JSON. Lida de
+      bronze_metadados.
     config:
       tags:
         - silver
@@ -151,20 +165,22 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier2
         owner: minc-data-engineering
     columns:
       - name: agregado_id
         description: >
-          Tipagem: 100% dos 9293 valores casam com inteiro.
+          Código do agregado pedido à API. Chave da tabela; liga com
+          silver_agregados_catalogo.id.
         data_type: integer
       - name: id
         description: >
-          Tipagem: 100% dos 9293 valores casam com inteiro.
+          Código do agregado como a API devolve no corpo da resposta. Igual a
+          agregado_id.
         data_type: integer
       - name: nome
         description: >
-          Tipagem: valores heterogeneos.
+          Título do agregado.
         data_type: text
         meta:
           openmetadata:
@@ -172,36 +188,42 @@ models:
               - PII.NonSensitive
       - name: url
         description: >
-          Tipagem: valores heterogeneos.
+          Endereço da tabela no site do SIDRA.
         data_type: text
       - name: pesquisa
         description: >
-          Tipagem: valores heterogeneos.
+          Nome da pesquisa do IBGE a que o agregado pertence.
         data_type: text
       - name: assunto
         description: >
-          Tipagem: valores heterogeneos.
+          Assunto do agregado, na classificação do IBGE.
         data_type: text
       - name: periodicidade
         description: >
-          Tipagem: valores heterogeneos.
+          Frequência da tabela e primeiro e último período publicados, em JSON.
         data_type: text
       - name: nivelterritorial
         description: >
-          Tipagem: valores heterogeneos.
+          Níveis geográficos em que o agregado tem dado (N1 Brasil, N3 UF, N6
+          município...), em JSON, separados em administrativos, especiais e do
+          IBGE.
         data_type: text
       - name: variaveis
         description: >
-          Tipagem: valores heterogeneos.
+          Lista das variáveis medidas pelo agregado, com código, nome e unidade,
+          em JSON.
         data_type: text
       - name: classificacoes
         description: >
-          Tipagem: valores heterogeneos.
+          Lista das classificações (recortes como sexo, idade, atividade) e das
+          suas categorias, em JSON. Pode passar de 500 mil caracteres.
         data_type: text
 
   - name: silver_periodos
     description: >
-      Camada silver tipada de ibge_sidra.periodos, lida de bronze_periodos. 4 colunas, 2 com cast aplicado.
+      Períodos disponíveis em cada agregado do SIDRA, tipados. Uma linha por
+      agregado e período (`agregado_id` + `id`). Vem do GET
+      /agregados/{id}/periodos. Lida de bronze_periodos.
     config:
       tags:
         - silver
@@ -209,29 +231,33 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier2
         owner: minc-data-engineering
     columns:
       - name: agregado_id
         description: >
-          Tipagem: 100% dos 85170 valores casam com inteiro.
+          Código do agregado do SIDRA. Liga com silver_agregados_catalogo.id.
         data_type: integer
       - name: id
         description: >
-          Tipagem: 100% dos 85170 valores casam com inteiro.
+          Código do período no SIDRA: o ano (aaaa) ou o ano seguido do mês ou do
+          trimestre (aaaamm), conforme a periodicidade do agregado.
         data_type: integer
       - name: literals
         description: >
-          Tipagem: valores heterogeneos.
+          Rótulos do período, em JSON, como a API devolve.
         data_type: text
       - name: modificacao
         description: >
-          Tipagem: valores heterogeneos.
+          Data da última modificação do período no SIDRA. Mantida como texto,
+          como chega da API.
         data_type: text
 
   - name: silver_pesquisas
     description: >
-      Camada silver tipada de ibge_sidra.pesquisas, lida de bronze_pesquisas. 3 colunas, 0 com cast aplicado.
+      Pesquisas do IBGE que têm tabelas no SIDRA. Uma linha por pesquisa (`id`).
+      Vem do GET /agregados. Lida de bronze_pesquisas; nenhuma coluna precisou
+      de cast.
     config:
       tags:
         - silver
@@ -239,16 +265,17 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier2
         owner: minc-data-engineering
     columns:
       - name: id
         description: >
-          Tipagem: valores heterogeneos.
+          Código de duas letras da pesquisa. Chave da tabela; liga com
+          silver_agregados_catalogo.pesquisa_id.
         data_type: text
       - name: nome
         description: >
-          Tipagem: valores heterogeneos.
+          Nome da pesquisa.
         data_type: text
         meta:
           openmetadata:
@@ -256,6 +283,6 @@ models:
               - PII.NonSensitive
       - name: agregados
         description: >
-          Tipagem: valores heterogeneos.
+          Lista dos agregados da pesquisa (código e nome), em JSON. É a mesma
+          informação de silver_agregados_catalogo, sem achatar.
         data_type: text
-

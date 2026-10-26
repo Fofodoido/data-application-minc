@@ -14,12 +14,18 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier3
         owner: minc-data-engineering
 
   - name: silver_serie_sgs
     description: >
-      Camada silver tipada de bacen.serie_sgs, lida de bronze_serie_sgs. 5 colunas, 2 com cast aplicado.
+      Séries temporais do SGS (Sistema Gerenciador de Séries Temporais) do
+      Banco Central, tipadas. Uma linha por série e data de referência
+      (`codigo_serie` + `data`). Todas as séries configuradas na Variable
+      `bacen_series_sgs` caem nesta mesma tabela; sem a Variable, a
+      bacen_sgs_ingest_dag traz só o IPCA-Serviços (SGS 10844). Serve de
+      deflator: os valores de repasse e de pagamento das políticas são
+      nominais e se espalham por vários anos. Lida de bronze_serie_sgs.
     config:
       tags:
         - silver
@@ -27,27 +33,33 @@ models:
     meta:
       openmetadata:
         domain: Cultura.Indicadores
-        tier: Tier.Tier4
+        tier: Tier.Tier2
         owner: minc-data-engineering
     columns:
       - name: data
         description: >
-          Tipagem: 100% dos 427 valores casam com data.
+          Data de referência do ponto da série. Na série mensal (IPCA-Serviços)
+          é o primeiro dia do mês de referência. Valor fora do padrão aaaa-mm-dd
+          vira nulo.
         data_type: date
       - name: serie
         description: >
-          Tipagem: coluna constante.
+          Nome curto da série, como está na Variable `bacen_series_sgs`
+          (`ipca_servicos`, por exemplo).
         data_type: text
       - name: valor
         description: >
-          Tipagem: 100% dos 427 valores casam com decimal.
+          Valor do ponto, na unidade da série. Na 10844 (IPCA-Serviços) é a
+          variação percentual no mês (0.42 = 0,42%), não o número-índice. Valor
+          que não é decimal com ponto vira nulo.
         data_type: numeric
       - name: dt_ingest
         description: >
-          Tipagem: coluna constante.
+          Momento da carga pela bacen_sgs_ingest_dag, em texto. A DAG recarrega
+          as séries inteiras a cada execução.
         data_type: text
       - name: codigo_serie
         description: >
-          Tipagem: coluna constante.
+          Código da série no SGS do Banco Central (10844 = IPCA-Serviços).
+          Mantido como texto, como chega da fonte.
         data_type: text
-

@@ -2,4 +2,4 @@
 -- grava.
 -- Sem cast, filtro nem join (ADR 0010): tudo continua text. Quem tipa é
 -- silver_localidades.
-select * from {{ source("ibge_sidra", "localidades") }}
+select * from {{ source("ibge_sidra", "localidades") }}  -- noqa: AM04
