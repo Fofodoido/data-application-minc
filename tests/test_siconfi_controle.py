@@ -4,16 +4,16 @@ O que estes testes garantem:
 
 - o controle nunca atualiza nem apaga linha: todo SQL de escrita é ``CREATE`` ou
   ``INSERT`` (o Trino não tem ``FOR UPDATE SKIP LOCKED`` nem ``ON CONFLICT``);
-- tudo sai pelo catálogo e schema configurados, e as leituras com
-  ``DISTINCT ON`` passam pela table function ``system.query``;
+- tudo sai pelo catálogo e schema configurados, em SQL do Trino: nada de
+  ``system.query`` nem ``system.execute``, que o Trino do servidor nega;
 - replanejar uma unidade com a mesma revisão não a põe de novo na fila, e uma
   revisão nova põe;
 - os literais escapam aspas e os instantes saem em UTC.
 
 Estes testes olham o **texto** do SQL, com um Trino falso: não dizem se a fila
 pendente ou o estado vigente estão certos. A semântica das consultas é conferida
-executando-as num Postgres de verdade, em ``test_siconfi_controle_postgres.py``
-(roda com ``SICONFI_TEST_PG_DSN`` definida).
+executando-as num Trino de verdade, com as mesmas permissões do servidor, em
+``test_siconfi_controle_trino.py`` (roda com ``SICONFI_TEST_TRINO`` definida).
 """
 
 from datetime import datetime, timedelta, timezone
@@ -75,14 +75,20 @@ def test_controle_so_cria_e_insere() -> None:
     controle, trino = _controle()
     _todos_os_metodos(controle)
     for sql in trino.executados:
-        if sql.startswith("CALL"):
-            # A única coisa que vai direto ao Postgres é a criação de índice.
-            assert "system.execute" in sql and "CREATE INDEX IF NOT EXISTS" in sql
-        else:
-            assert sql.split()[0] in {"CREATE", "INSERT"}, sql
+        assert sql.split()[0] in {"CREATE", "INSERT"}, sql
     for sql in trino.executados + trino.lidos:
         for proibido in ("UPDATE ", "DELETE ", "MERGE ", "ON CONFLICT", "FOR UPDATE"):
             assert proibido not in sql.upper(), sql
+
+
+def test_nada_vai_como_sql_nativo_ao_postgres() -> None:
+    """O Trino do servidor nega ``system.query`` e ``system.execute`` ao usuário
+    do Airflow (``Access Denied``, 26/10/2026)."""
+    controle, trino = _controle()
+    _todos_os_metodos(controle)
+    for sql in trino.executados + trino.lidos:
+        for proibido in ("system.query", "system.execute", "CALL ", "::", "ANY("):
+            assert proibido not in sql, sql
 
 
 def test_tabelas_saem_no_catalogo_e_schema_configurados() -> None:
@@ -101,36 +107,15 @@ def test_tabelas_saem_no_catalogo_e_schema_configurados() -> None:
     }
 
 
-def test_cada_consulta_tem_o_seu_indice_criado_pelo_trino() -> None:
-    """O CREATE TABLE do Trino não cria índice; sem eles, a fila e o
-    planejamento varrem a tabela inteira a cada consulta."""
-    controle, trino = _controle()
-    controle.ensure_tables()
-    indices = [sql for sql in trino.executados if sql.startswith("CALL")]
-    assert indices == [
-        'CALL "dw".system.execute(query => '
-        f"'CREATE INDEX IF NOT EXISTS {tabela}_busca_idx "
-        f'ON "control".{tabela} {colunas}\')'
-        for tabela, colunas in (
-            ("siconfi_work_units", "(endpoint, work_key, planned_at DESC)"),
-            (
-                "siconfi_work_events",
-                "(endpoint, work_key, revision_marker, event_at DESC)",
-            ),
-            ("siconfi_plan_keys", "(source, scope_hash)"),
-            ("siconfi_reference_refresh", "(endpoint, refreshed_at DESC)"),
-        )
-    ]
-
-
-def test_leitura_da_fila_e_sql_nativo_pelo_system_query() -> None:
+def test_leitura_da_fila_filtra_no_trino() -> None:
     controle, trino = _controle([[("k1", '{"id_ente": 1}', "r1")]])
     pendentes = controle.pending("rreo", 7, {"an_exercicio": [2025, 2024]})
 
     (sql,) = trino.lidos
-    assert sql.startswith('SELECT * FROM TABLE("dw".system.query(query => ')
-    assert "DISTINCT ON" in sql and "LIMIT 7" in sql
-    assert "ANY(ARRAY[''2024'', ''2025'']::text[])" in sql
+    assert sql.startswith("WITH u AS (")
+    assert sql.count("row_number() OVER") == 2 and "LIMIT 7" in sql
+    assert "json_extract_scalar(u.params, '$.an_exercicio') IN ('2024', '2025')" in sql
+    assert "endpoint = 'rreo'" in sql
     assert pendentes == [
         {"work_key": "k1", "params": {"id_ente": 1}, "revision_marker": "r1"}
     ]
@@ -212,12 +197,15 @@ def test_literais_escapam_aspas_e_instantes_saem_em_utc() -> None:
     assert params_json({"b": 1, "a": 2}) == '{"a": 2, "b": 1}'
 
 
-class _TrinoSemSystemQuery(_TrinoFalso):
+class _TrinoSemCatalogo(_TrinoFalso):
     def records(self, sql: str) -> list[Sequence[Any]]:
-        raise RuntimeError("Function 'query' not registered")
+        raise RuntimeError("line 1:14: Catalog 'dw' not found")
 
 
-def test_conector_sem_system_query_falha_cedo_e_diz_o_que_falta() -> None:
-    controle = SiconfiControle(_TrinoSemSystemQuery(), catalog="dw", schema="control")
-    with pytest.raises(RuntimeError, match="system.query e system.execute"):
+def test_catalogo_inexistente_falha_cedo_e_aponta_a_variable() -> None:
+    """Foi o primeiro erro no servidor: lá o catálogo não se chama ``dw``."""
+    trino = _TrinoSemCatalogo()
+    controle = SiconfiControle(trino, catalog="dw", schema="control")
+    with pytest.raises(RuntimeError, match="siconfi_trino_target_catalog"):
         controle.ensure_tables()
+    assert trino.executados == []

@@ -56,16 +56,37 @@ padrão `dw` e `control`):
 | `siconfi_plan_keys` | arquivo do extrato já planejado, por recorte |
 
 Uma unidade está pendente enquanto a revisão vigente dela não tem evento final.
-As leituras que precisam de `DISTINCT ON` saem pela table function
-`system.query`, que executa SQL nativo no Postgres. Nenhuma linha é atualizada
-ou apagada.
+Nenhuma linha é atualizada ou apagada.
 
-O `CREATE TABLE` do Trino não cria índice. Os quatro índices que essas leituras
-usam são criados pela procedure `system.execute` do conector, que repassa o
-`CREATE INDEX IF NOT EXISTS` ao Postgres, também pelo Trino. Medido em
-22/10/2026 com 397 mil unidades: a fila pendente da MSC caiu de 1,3 s para
-0,5 s e a contagem por estado, de 3,8 s para 0,9 s. A consulta do planejamento
-passou a usar o índice (10 ms no Postgres, mais o custo fixo do Trino).
+**Todo o SQL é do Trino.** A revisão vigente de cada unidade e o último evento
+de cada revisão saem de `row_number()`, calculado no Trino; o filtro por
+endpoint e por chave desce ao Postgres. A primeira versão usava a table function
+`system.query` (SQL nativo, com `DISTINCT ON`) e criava índices pela procedure
+`system.execute`. No servidor, o Trino nega as duas ao usuário do Airflow
+(`Access Denied: Cannot execute function hml_analytics.system.query`,
+26/10/2026), e a `preparar` da conversão parou ali. O mesmo pode valer no
+Serpro, então o controle não depende delas.
+
+Sem `system.execute`, a DAG não cria índice. Medido em 26/10/2026 com 397 mil
+unidades, sem índice: a fila pendente da MSC sai em 1,5 a 2,7 s, a contagem por
+estado em 2,5 s e a busca de um lote de 500 chaves no planejamento em 1,4 s. A
+contagem por estado deu o mesmo resultado da consulta com `DISTINCT ON`. Se a
+fila ficar lenta, quem administra o banco pode criar os índices, uma vez:
+
+```sql
+CREATE INDEX IF NOT EXISTS siconfi_work_units_busca_idx
+    ON control.siconfi_work_units (endpoint, work_key, planned_at DESC);
+CREATE INDEX IF NOT EXISTS siconfi_work_events_busca_idx
+    ON control.siconfi_work_events (endpoint, work_key, revision_marker, event_at DESC);
+CREATE INDEX IF NOT EXISTS siconfi_plan_keys_busca_idx
+    ON control.siconfi_plan_keys (source, scope_hash);
+CREATE INDEX IF NOT EXISTS siconfi_reference_refresh_busca_idx
+    ON control.siconfi_reference_refresh (endpoint, refreshed_at DESC);
+```
+
+O catálogo vem da Variable `siconfi_trino_target_catalog`. O padrão `dw` é o
+nome no ambiente local; no servidor o catálogo do dbanalytics é outro, e sem a
+Variable a `preparar` falha dizendo isso.
 
 **Um consumidor por fila, em vez de trava de linha.** A DAG roda um run por vez
 e uma task por vez (`max_active_tasks=1`). Isso garante que duas tasks nunca
@@ -113,6 +134,9 @@ unidades, todas já na fila e nenhuma com marcador de revisão diferente.
 - **Staging em Parquet, como no ADR 0011.** Era o desenho da primeira versão do
   PR #86. Fere o ADR 0009, e o SICONFI não tem formato para converter.
 - **Manter a fila no Postgres por `psycopg2`.** Não funciona em produção.
+- **SQL nativo pelo `system.query` e índices pelo `system.execute`.** Era a
+  versão do PR #86. O Trino do servidor nega as duas ao usuário do Airflow, e
+  liberar `system.query` daria a ele SQL qualquer direto no Postgres.
 - **Tabela de controle Iceberg via Trino.** Depende do Polaris, que ainda não
   existe, e tem os mesmos limites de transação.
 - **Fila nenhuma, com o pendente calculado como "planejado menos o que existe no

@@ -1,0 +1,7 @@
+{
+  "catalogs": [{"allow": "all"}],
+  "schemas": [{"owner": true}],
+  "tables": [{"privileges": ["SELECT", "INSERT", "DELETE", "UPDATE", "OWNERSHIP"]}],
+  "functions": [{"catalog": "system", "schema": "builtin", "privileges": ["EXECUTE", "GRANT_EXECUTE"]}],
+  "procedures": []
+}
