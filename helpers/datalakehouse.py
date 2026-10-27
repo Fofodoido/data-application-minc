@@ -36,7 +36,7 @@ import logging
 import math
 import re
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Sequence, TypeVar
 
 import pandas as pd
 
@@ -54,6 +54,17 @@ _EXTENSAO = {CAMADA_RAW: "json", CAMADA_STAGING: "parquet"}
 # O run_id do Airflow carrega ':' e '+' (manual__2026-10-01T12:00:00+00:00),
 # que viram escape em URL de S3 e atrapalham quem lista o bucket pelo console.
 _CARACTERE_INSEGURO = re.compile(r"[^A-Za-z0-9._=-]")
+
+# O proxy na frente do MinIO do servidor recusa corpo de requisição acima de
+# 1 MiB (413 Request Entity Too Large; medido em 26/10/2026 entre uma página de
+# 0,97 MB que passou e uma de 1,40 MB que não passou). Quem grava um JSON que
+# pode passar disso divide o conteúdo em partes abaixo deste valor, com folga
+# para o cabeçalho da requisição. O upload em partes do S3 (multipart) não
+# resolve: cada parte tem no mínimo 5 MB.
+LIMITE_OBJETO_BYTES = 900 * 1024
+_PARTE_NO_NOME = re.compile(r"^(?P<base>.+)_p(?P<indice>\d+)de(?P<total>\d+)$")
+
+_T = TypeVar("_T")
 
 
 # ── caminhos ─────────────────────────────────────────────────────────────
@@ -123,6 +134,55 @@ def caminho_no_run(
         f"{prefixo_do_run(camada, fonte, entidade, run_id, data)}"
         f"{sanitizar_run_id(nome)}.{_EXTENSAO[camada]}"
     )
+
+
+def fatiar_por_tamanho(
+    itens: Sequence[_T], tamanho: Callable[[_T], int], limite: int
+) -> list[list[_T]]:
+    """Divide ``itens``, na ordem, em grupos cuja soma de ``tamanho`` cabe em ``limite``.
+
+    Sempre devolve ao menos um grupo (vazio, se não há itens). Um item que sozinho
+    passa do limite não tem como ser gravado: falha aqui, com o tamanho, em vez de
+    falhar no MinIO com 413.
+    """
+    grupos: list[list[_T]] = []
+    atual: list[_T] = []
+    soma = 0
+    for item in itens:
+        bytes_item = tamanho(item)
+        if bytes_item > limite:
+            raise ValueError(
+                f"um item sozinho tem {bytes_item} bytes, acima do limite de "
+                f"{limite} bytes por arquivo"
+            )
+        if atual and soma + bytes_item > limite:
+            grupos.append(atual)
+            atual, soma = [], 0
+        atual.append(item)
+        soma += bytes_item
+    if atual or not grupos:
+        grupos.append(atual)
+    return grupos
+
+
+def nome_da_parte(nome: str, indice: int, total: int) -> str:
+    """``<nome>_p02de03``: a parte ``indice`` (a partir de 1) de ``total``.
+
+    Os números têm a mesma largura, então as partes de um arquivo ficam em
+    ordem também numa listagem por nome.
+    """
+    if not 1 <= indice <= total:
+        raise ValueError(f"parte {indice} de {total} não existe")
+    largura = max(2, len(str(total)))
+    return f"{nome}_p{indice:0{largura}d}de{total:0{largura}d}"
+
+
+def parte_do_nome(nome: str) -> tuple[str, int, int] | None:
+    """O inverso de ``nome_da_parte``: ``(nome, indice, total)``, ou ``None``."""
+    achado = _PARTE_NO_NOME.match(nome)
+    if not achado:
+        return None
+    return achado["base"], int(achado["indice"]), int(achado["total"])
 
 
 def raw_para_staging_key(key_raw: str) -> str:

@@ -59,7 +59,7 @@ from siconfi_migracao import (
     leitor_da_fila,
     leitor_de_lotes,
     migrar_endpoint,
-    objetos_dos_runs,
+    paginas_dos_runs,
     pendencias,
     runs_na_origem,
     tabela_antiga,
@@ -142,7 +142,7 @@ def _conferir() -> dict[str, Any]:
                 paginas_na_origem=total,
                 distintas_na_origem=sum(n for _, _, n in runs),
                 copiadas=progresso.ler(tabela)[1],
-                objetos_no_raw=objetos_dos_runs(endpoint, runs),
+                paginas_no_raw=paginas_dos_runs(endpoint, runs),
             )
         if fila_existe(conn):
             amostra = amostra_da_fila_antiga(conn)

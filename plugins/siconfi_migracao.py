@@ -43,7 +43,13 @@ from psycopg2.extras import RealDictCursor
 import datalakehouse
 from cliente_siconfi import request_hash
 from siconfi_controle import FINAL_STATUSES, SiconfiControle, params_json
-from siconfi_storage import FONTE, VALID_ENDPOINTS, entidade, gravar_envelope
+from siconfi_storage import (
+    FONTE,
+    VALID_ENDPOINTS,
+    entidade,
+    gravar_envelope,
+    paginas_completas,
+)
 
 ORIGEM_SCHEMA = "siconfi_bronze"
 # Schema do controle antigo: tem a fila antiga e guarda o progresso desta conversão.
@@ -176,8 +182,9 @@ def envelope_da_linha(linha: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def gravar_linha(linha: Mapping[str, Any]) -> str:
-    """Grava uma página antiga no raw; devolve a key."""
+def gravar_linha(linha: Mapping[str, Any]) -> list[str]:
+    """Grava uma página antiga no raw; devolve as keys (mais de uma se ela foi
+    dividida em partes)."""
     return gravar_envelope(
         envelope_da_linha(linha), data_do_run(linha["run_id"], linha["fetched_at"])
     )
@@ -239,34 +246,37 @@ def avaliar_tabela(
     paginas_na_origem: int,
     distintas_na_origem: int,
     copiadas: int,
-    objetos_no_raw: int,
+    paginas_no_raw: int,
 ) -> dict[str, Any]:
     """Situação de uma tabela: ``completo``, ``em_andamento`` ou ``inconsistente``.
 
-    ``inconsistente`` é a cópia dada como terminada sem os arquivos esperados no
-    raw: página perdida, chave repetida que virou um objeto só, ou bucket errado.
+    ``inconsistente`` é a cópia dada como terminada sem as páginas esperadas no
+    raw: página perdida ou com parte faltando, chave repetida que virou uma
+    página só, ou bucket errado.
     Parar pelo limite ou pelo prazo não é inconsistência: é ``em_andamento``.
     """
     if copiadas < paginas_na_origem:
         situacao = "em_andamento"
-    elif objetos_no_raw == distintas_na_origem == paginas_na_origem:
+    elif paginas_no_raw == distintas_na_origem == paginas_na_origem:
         situacao = "completo"
     else:
         situacao = "inconsistente"
     return {
         "paginas_na_origem": paginas_na_origem,
         "paginas_copiadas": copiadas,
-        "objetos_no_raw": objetos_no_raw,
+        "paginas_no_raw": paginas_no_raw,
         "faltam": paginas_na_origem - copiadas,
         "situacao": situacao,
     }
 
 
-def objetos_dos_runs(endpoint: str, runs: list[tuple[str, datetime, int]]) -> int:
-    """Quantos arquivos existem no raw nas pastas dos runs antigos de ``endpoint``.
+def paginas_dos_runs(endpoint: str, runs: list[tuple[str, datetime, int]]) -> int:
+    """Quantas páginas inteiras há no raw nas pastas dos runs antigos de ``endpoint``.
 
-    A DAG nova nunca grava numa pasta de run antigo, então o que estiver nessas
-    pastas veio da conversão.
+    Conta páginas, não arquivos: uma página dividida em partes conta uma vez, e
+    só se todas as partes estão lá (``siconfi_storage.paginas_completas``). A DAG
+    nova nunca grava numa pasta de run antigo, então o que estiver nessas pastas
+    veio da conversão.
     """
     total = 0
     for run_id, min_fetched_at, _ in runs:
@@ -277,8 +287,10 @@ def objetos_dos_runs(endpoint: str, runs: list[tuple[str, datetime, int]]) -> in
             run_id,
             data_do_run(run_id, min_fetched_at),
         )
-        total += sum(
-            1 for o in datalakehouse.listar_objetos(prefixo) if o["Key"].endswith(".json")
+        total += paginas_completas(
+            o["Key"]
+            for o in datalakehouse.listar_objetos(prefixo)
+            if o["Key"].endswith(".json")
         )
     return total
 

@@ -35,7 +35,7 @@ from siconfi_migracao import (
     envelope_da_linha,
     exigir_sem_duplicatas,
     migrar_endpoint,
-    objetos_dos_runs,
+    paginas_dos_runs,
     pendencias,
     status_da_fila_antiga,
     tabela_antiga,
@@ -278,7 +278,38 @@ def test_objetos_contados_so_nas_pastas_dos_runs_antigos(bucket: _BucketFalso) -
     # Um arquivo da DAG nova, em outro run, não entra na conta.
     persist_page(_page(), "manual__2026-10-21T10:00:00+00:00", _DATA_DO_RUN)
 
-    assert objetos_dos_runs("rreo", [(_RUN, _COLETA_BRT, 2)]) == 2
+    assert paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 2)]) == 2
+
+
+def _linha_grande(raw_page_id: int = 7) -> dict[str, Any]:
+    """Uma página de ~2,6 MB, como as maiores da MSC orçamentária."""
+    items = [
+        {"conta": f"{i:09d}", "valor": i * 1.5, "rotulo": "x" * 480} for i in range(5000)
+    ]
+    return _linha(
+        raw_page_id,
+        payload={"items": items, "hasMore": True, "offset": 0},
+        item_count=len(items),
+    )
+
+
+def test_pagina_grande_vira_partes_e_conta_como_uma(bucket: _BucketFalso) -> None:
+    keys = siconfi_migracao.gravar_linha(_linha_grande())
+
+    assert len(keys) == 3 and keys == sorted(keys)
+    assert all(
+        len(bucket.objetos[k]) <= siconfi_storage.datalakehouse.LIMITE_OBJETO_BYTES
+        for k in keys
+    )
+    assert paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 1)]) == 1
+
+
+def test_pagina_com_parte_faltando_nao_conta(bucket: _BucketFalso) -> None:
+    keys = siconfi_migracao.gravar_linha(_linha_grande())
+    del bucket.objetos[keys[1]]
+
+    assert paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 1)]) == 0
+    assert avaliar_tabela(1, 1, 1, 0)["situacao"] == "inconsistente"
 
 
 # ── fila ─────────────────────────────────────────────────────────────────

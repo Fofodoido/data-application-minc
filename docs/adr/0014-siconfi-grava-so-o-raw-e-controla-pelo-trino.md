@@ -42,6 +42,26 @@ com o `payload` intacto). A carga da bronze `siconfi.bronze_<entidade>` lê o
 raw direto, como o ADR 0009 descreve. Para o SICONFI, isso resolve o conflito
 entre o ADR 0009 e o 0011 a favor do 0009.
 
+**Página acima de 900 KB vira partes.** O proxy na frente do MinIO do servidor
+recusa corpo de requisição acima de 1 MiB (`413 Request Entity Too Large`). O
+limite foi medido em 26/10/2026 entre uma página de 0,97 MB que passou e uma de
+1,40 MB que não passou. Quase metade das páginas da MSC orçamentária passa disso
+(a maior tem 2,5 MB). A página que passa de `datalakehouse.LIMITE_OBJETO_BYTES`
+(900 KB, com folga para o cabeçalho) é gravada em partes:
+
+```text
+<request_hash>_<page_offset>_p01de03.json
+<request_hash>_<page_offset>_p02de03.json
+<request_hash>_<page_offset>_p03de03.json
+```
+
+Cada parte é o envelope inteiro com uma fatia dos `items` do `payload`, na ordem,
+e o campo `_parte` (`indice`, `total`, `itens`). O `item_count` continua sendo o
+da página. Página que cabe continua num arquivo só, com o nome de sempre e sem
+`_parte`, então as páginas gravadas antes desta regra não mudam. A divisão
+(`datalakehouse.fatiar_por_tamanho` e `nome_da_parte`) não é do SICONFI: as
+outras fontes que gravarem JSON grande no MinIO podem usar a mesma.
+
 **O controle sai pelo Trino, só com inserção**, no padrão dos logs do SALIC v2 e
 do Mapas (`control.*_ingestion_log`): tabelas no Postgres, criadas e escritas
 por SQL enviado pelo `TrinoHook`. São quatro, em `<catálogo>.control`
@@ -146,6 +166,12 @@ unidades, todas já na fila e nenhuma com marcador de revisão diferente.
 - **Fila nenhuma, com o pendente calculado como "planejado menos o que existe no
   raw".** Perde tentativas e backoff por unidade e exige listar centenas de
   milhares de arquivos a cada run.
+- **Upload em partes do S3 (multipart) contra o limite do proxy.** Cada parte tem
+  no mínimo 5 MB, então continua acima de 1 MiB.
+- **Compactar o raw (`.json.gz`).** A maior página da MSC cairia de 2,5 MB para
+  ~65 KB, mas a equipe escolheu dividir (26/10/2026): o arquivo continua JSON
+  legível no console do MinIO, e a mesma divisão serve a fontes cujo conteúdo não
+  compacta, como os anexos em PDF.
 - **Pool do Airflow com uma vaga para o limite da API.** Se o pool não existir
   na instância, as tasks ficam em `scheduled` para sempre, sem log. O
   `max_active_tasks=1` da própria DAG tem o mesmo efeito sem depender de
@@ -163,6 +189,10 @@ unidades, todas já na fila e nenhuma com marcador de revisão diferente.
   - uma requisição pode ter só parte das páginas na pasta, se a paginação falhou
     no meio, e a mesma página pode aparecer em runs diferentes. A bronze
     deduplica por `(request_hash, page_offset)`;
+  - uma página dividida tem os itens espalhados pelas partes: a bronze lê os
+    itens de todas, e a soma de `_parte.itens` tem de dar o `item_count`. Uma
+    página com parte faltando está incompleta, e a conferência da conversão
+    (`siconfi_storage.paginas_completas`) não a conta;
   - se o `page_limit` mudar entre duas tentativas no mesmo run, a mesma
     requisição fica com páginas de dois tamanhos na pasta, com deslocamentos
     diferentes e itens repetidos. Deduplicar por `(request_hash, page_offset)`

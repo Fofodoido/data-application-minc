@@ -40,6 +40,8 @@ from siconfi_storage import (
     envelope_da_pagina,
     ingerir_endpoint,
     itens_do_raw,
+    paginas_completas,
+    partes_do_envelope,
     persist_page,
     plan_from_extrato,
     raw_keys,
@@ -425,3 +427,81 @@ def test_endpoint_fora_do_recorte_nem_consulta_a_fila(bucket: _BucketFalso) -> N
         prazo_s=60,
     )
     assert resumo["pending"] == 0 and controle.filtro is None
+
+
+# ── página acima do limite do proxy do MinIO ─────────────────────────────
+
+_LIMITE = 4000
+
+
+def _envelope(n_itens: int) -> dict[str, Any]:
+    items = [{**_ITEM_RREO, "cod_ibge": i} for i in range(n_itens)]
+    page = SiconfiPage(
+        endpoint="rreo",
+        params={"id_ente": 1, "an_exercicio": 2024},
+        offset=5000,
+        items=items,
+        has_more=True,
+        headers={"content-type": "application/json"},
+        payload={"items": items, "hasMore": True, "offset": 5000, "limit": 5000},
+    )
+    return envelope_da_pagina(page, _RUN, _COLETA)
+
+
+def test_pagina_que_cabe_nao_muda() -> None:
+    envelope = _envelope(3)
+    assert partes_do_envelope(envelope, _LIMITE) == [envelope]
+
+
+def test_pagina_grande_vira_partes_com_os_itens_na_ordem() -> None:
+    envelope = _envelope(40)
+    partes = partes_do_envelope(envelope, _LIMITE)
+
+    assert len(partes) > 1
+    for parte in partes:
+        corpo = json.dumps(parte, ensure_ascii=False, default=str).encode("utf-8")
+        assert len(corpo) <= _LIMITE
+        # O resto do envelope se repete; só os itens são fatiados.
+        assert {k: v for k, v in parte.items() if k not in ("payload", "_parte")} == {
+            k: v for k, v in envelope.items() if k != "payload"
+        }
+        assert parte["payload"]["hasMore"] is True
+        assert parte["_parte"]["itens"] == len(parte["payload"]["items"])
+    assert [p["_parte"]["indice"] for p in partes] == list(range(1, len(partes) + 1))
+    assert {p["_parte"]["total"] for p in partes} == {len(partes)}
+    juntos = [item for p in partes for item in p["payload"]["items"]]
+    assert juntos == envelope["payload"]["items"]
+    assert sum(p["_parte"]["itens"] for p in partes) == envelope["item_count"] == 40
+
+
+def test_pagina_grande_sem_itens_falha_com_o_motivo() -> None:
+    envelope = {**_envelope(0), "payload": {"texto": "x" * _LIMITE}}
+    with pytest.raises(ValueError, match="sem lista de itens"):
+        partes_do_envelope(envelope, _LIMITE)
+
+
+def test_gravar_pagina_grande_grava_cada_parte(bucket: Any) -> None:
+    envelope = _envelope(40)
+    with patch.object(siconfi_storage.datalakehouse, "LIMITE_OBJETO_BYTES", _LIMITE):
+        keys = siconfi_storage.gravar_envelope(envelope, _DATA)
+
+    total = len(keys)
+    assert total > 1 and set(keys) == set(bucket.objetos)
+    base = f"{envelope['request_hash']}_5000"
+    largura = max(2, len(str(total)))
+    assert [k.rsplit("/", 1)[-1] for k in keys] == [
+        f"{base}_p{i:0{largura}d}de{total:0{largura}d}.json" for i in range(1, total + 1)
+    ]
+    lidos = [item for key in raw_keys("rreo") for item in itens_do_raw(key)]
+    assert lidos == envelope["payload"]["items"]
+
+
+def test_paginas_completas_conta_pagina_e_nao_arquivo() -> None:
+    keys = [
+        "raw/x/a_0.json",
+        "raw/x/b_0_p01de02.json",
+        "raw/x/b_0_p02de02.json",
+        "raw/x/c_0_p01de03.json",  # faltam duas partes
+        "raw/x/c_0_p03de03.json",
+    ]
+    assert paginas_completas(keys) == 2
