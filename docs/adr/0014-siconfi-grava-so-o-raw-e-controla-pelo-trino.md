@@ -42,6 +42,26 @@ com o `payload` intacto). A carga da bronze `siconfi.bronze_<entidade>` lê o
 raw direto, como o ADR 0009 descreve. Para o SICONFI, isso resolve o conflito
 entre o ADR 0009 e o 0011 a favor do 0009.
 
+**Página acima de 900 KiB vira partes.** O proxy na frente do MinIO do servidor
+recusa corpo de requisição acima de 1 MiB (`413 Request Entity Too Large`). O
+limite foi medido em 26/10/2026 entre uma página de 0,97 MB que passou e uma de
+1,40 MB que não passou. Quase metade das páginas da MSC orçamentária passa disso
+(a maior tem 2,5 MB). A página que passa de `datalakehouse.LIMITE_OBJETO_BYTES`
+(900 KiB, com folga para o cabeçalho) é gravada em partes:
+
+```text
+<request_hash>_<page_offset>_p01de03.json
+<request_hash>_<page_offset>_p02de03.json
+<request_hash>_<page_offset>_p03de03.json
+```
+
+Cada parte é o envelope inteiro com uma fatia dos `items` do `payload`, na ordem,
+e o campo `_parte` (`indice`, `total`, `itens`). O `item_count` continua sendo o
+da página. Página que cabe continua num arquivo só, com o nome de sempre e sem
+`_parte`, então as páginas gravadas antes desta regra não mudam. A divisão
+(`datalakehouse.fatiar_por_tamanho` e `nome_da_parte`) não é do SICONFI: as
+outras fontes que gravarem JSON grande no MinIO podem usar a mesma.
+
 **O controle sai pelo Trino, só com inserção**, no padrão dos logs do SALIC v2 e
 do Mapas (`control.*_ingestion_log`): tabelas no Postgres, criadas e escritas
 por SQL enviado pelo `TrinoHook`. São quatro, em `<catálogo>.control`
@@ -146,6 +166,12 @@ unidades, todas já na fila e nenhuma com marcador de revisão diferente.
 - **Fila nenhuma, com o pendente calculado como "planejado menos o que existe no
   raw".** Perde tentativas e backoff por unidade e exige listar centenas de
   milhares de arquivos a cada run.
+- **Upload em partes do S3 (multipart) contra o limite do proxy.** Cada parte tem
+  no mínimo 5 MB, então continua acima de 1 MiB.
+- **Compactar o raw (`.json.gz`).** A maior página da MSC cairia de 2,5 MB para
+  ~65 KiB, mas a equipe escolheu dividir (26/10/2026): o arquivo continua JSON
+  legível no console do MinIO, e a mesma divisão serve a fontes cujo conteúdo não
+  compacta, como os anexos em PDF.
 - **Pool do Airflow com uma vaga para o limite da API.** Se o pool não existir
   na instância, as tasks ficam em `scheduled` para sempre, sem log. O
   `max_active_tasks=1` da própria DAG tem o mesmo efeito sem depender de
@@ -156,17 +182,28 @@ unidades, todas já na fila e nenhuma com marcador de revisão diferente.
 - **Ordem no deploy:** a conversão da fila precisa rodar antes de a ingestão nova
   planejar. Sem ela, a ingestão não sabe o que já foi baixado. A conversão das
   páginas só termina com a ingestão antiga desligada.
-- **Contrato com a carga da bronze (próximo PR):**
+- **Contrato com a bronze e a silver (próximo PR):**
+  - a bronze carrega o raw como está, sem remover registros (ADR 0010): todos os
+    arquivos, de todos os runs, inclusive as partes e as páginas repetidas. Quem
+    deduplica é a silver;
   - cada pasta de run tem só o que aquele run processou, então quem consome lê
     **todos** os eventos recebidos (`eventos_em_ordem`), não só o mais novo;
   - o `extra` traz a pasta do run, não a key de um arquivo;
   - uma requisição pode ter só parte das páginas na pasta, se a paginação falhou
-    no meio, e a mesma página pode aparecer em runs diferentes. A bronze
-    deduplica por `(request_hash, page_offset)`;
+    no meio, e a mesma página pode aparecer em runs diferentes. A silver fica,
+    para cada `(request_hash, page_offset)`, com a página de um run só, a de
+    `fetched_at` mais recente, e leva **todas** as partes dela. Deduplicar
+    linha a linha por `(request_hash, page_offset)` perderia os itens das outras
+    partes, que têm a mesma chave;
+  - uma página dividida tem os itens espalhados pelas partes: a silver junta os
+    itens de todas, e a soma de `_parte.itens` tem de dar o `item_count`. O
+    `item_count` se repete em cada parte, então somá-lo por arquivo conta a mais.
+    Uma página com parte faltando está incompleta: a silver não a usa, e a
+    conferência da conversão (`siconfi_storage.contar_paginas`) não a conta;
   - se o `page_limit` mudar entre duas tentativas no mesmo run, a mesma
     requisição fica com páginas de dois tamanhos na pasta, com deslocamentos
     diferentes e itens repetidos. Deduplicar por `(request_hash, page_offset)`
-    não resolve: a bronze fica, por `request_hash`, só com as páginas da
+    não resolve: a silver fica, por `request_hash`, só com as páginas da
     tentativa de `fetched_at` mais recente;
   - as pastas convertidas não emitem evento: a carga inicial da bronze varre
     `raw/siconfi/<entidade>/` inteiro.
@@ -174,6 +211,11 @@ unidades, todas já na fila e nenhuma com marcador de revisão diferente.
   do ADR 0009:** a mesma página regravada no mesmo run (retry da task ou
   conversão repetida) cai na mesma key. O conteúdo é o mesmo, salvo se a API
   mudar a resposta entre as duas tentativas; nesse caso vale a mais recente.
+  Uma página que antes coube num arquivo e, regravada, passa do limite vira
+  partes: `gravar_envelope` apaga o arquivo inteiro depois de gravar todas as
+  partes, para a mesma página não ficar nas duas formas. Se as duas formas
+  aparecerem, ou partes de duas divisões com `total` diferente, a conferência
+  dá a página como `inconsistente`.
 - **Página vazia também vira arquivo.** Uma unidade `no_data` grava um JSON
   pequeno; na MSC isso pode chegar a centenas de milhares de arquivos. Fica
   assim por enquanto, porque o arquivo é a prova de que a requisição foi feita.

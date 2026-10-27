@@ -19,8 +19,11 @@ from datalakehouse import (
     caminho,
     caminho_particionado,
     eventos_em_ordem,
+    fatiar_por_tamanho,
     key_da_cadeia,
+    nome_da_parte,
     parquet_para_registros,
+    parte_do_nome,
     raw_para_staging_key,
     registros_para_parquet,
     uri_asset,
@@ -274,3 +277,32 @@ def test_existe_objeto_pede_uma_chave_so() -> None:
     s3.list_objects_v2.assert_called_with(
         Bucket=datalakehouse.BUCKET, Prefix="raw/siconfi/rgf/x/", MaxKeys=1
     )
+
+
+# ── divisão de arquivos acima do limite do proxy do MinIO ────────────────
+
+
+def test_fatia_na_ordem_sem_passar_do_limite() -> None:
+    grupos = fatiar_por_tamanho([4, 4, 4, 1, 9, 2], lambda n: n, 9)
+    assert grupos == [[4, 4], [4, 1], [9], [2]]
+    assert [n for grupo in grupos for n in grupo] == [4, 4, 4, 1, 9, 2]
+
+
+def test_sem_itens_devolve_um_grupo_vazio() -> None:
+    assert fatiar_por_tamanho([], len, 10) == [[]]
+
+
+def test_item_maior_que_o_limite_falha_antes_do_minio() -> None:
+    with pytest.raises(ValueError, match="um item sozinho tem 11 bytes"):
+        fatiar_por_tamanho(["x" * 11], len, 10)
+
+
+def test_nome_da_parte_ida_e_volta_e_ordenavel() -> None:
+    assert nome_da_parte("abc_5000", 2, 3) == "abc_5000_p02de03"
+    assert nome_da_parte("abc_0", 7, 120) == "abc_0_p007de120"
+    assert parte_do_nome("abc_5000_p02de03") == ("abc_5000", 2, 3)
+    assert parte_do_nome("abc_5000") is None
+    nomes = [nome_da_parte("a", i, 12) for i in range(1, 13)]
+    assert sorted(nomes) == nomes
+    with pytest.raises(ValueError):
+        nome_da_parte("a", 4, 3)
