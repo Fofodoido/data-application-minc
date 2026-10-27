@@ -64,6 +64,9 @@ class _BucketFalso:
     def listar_objetos(self, prefixo: str) -> list[dict[str, Any]]:
         return [{"Key": key} for key in self.objetos if key.startswith(prefixo)]
 
+    def apagar_objeto(self, key: str) -> None:
+        self.objetos.pop(key, None)
+
 
 @pytest.fixture
 def bucket() -> Any:
@@ -72,6 +75,7 @@ def bucket() -> Any:
     with (
         patch.object(lake, "gravar_bytes", falso.gravar_bytes),
         patch.object(lake, "listar_objetos", falso.listar_objetos),
+        patch.object(lake, "apagar_objeto", falso.apagar_objeto),
     ):
         yield falso
 
@@ -278,7 +282,7 @@ def test_objetos_contados_so_nas_pastas_dos_runs_antigos(bucket: _BucketFalso) -
     # Um arquivo da DAG nova, em outro run, não entra na conta.
     persist_page(_page(), "manual__2026-10-21T10:00:00+00:00", _DATA_DO_RUN)
 
-    assert paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 2)]) == 2
+    assert paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 2)]).completas == 2
 
 
 def _linha_grande(raw_page_id: int = 7) -> dict[str, Any]:
@@ -301,14 +305,35 @@ def test_pagina_grande_vira_partes_e_conta_como_uma(bucket: _BucketFalso) -> Non
         len(bucket.objetos[k]) <= siconfi_storage.datalakehouse.LIMITE_OBJETO_BYTES
         for k in keys
     )
-    assert paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 1)]) == 1
+    assert paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 1)]).completas == 1
+
+
+def test_rerun_do_lote_nao_deixa_a_pagina_em_duas_formas(bucket: _BucketFalso) -> None:
+    """O lote que falhou com 413 é regravado: a página que tinha passado inteira
+    vira partes, e o arquivo inteiro sai."""
+    lake = siconfi_storage.datalakehouse
+    with patch.object(lake, "LIMITE_OBJETO_BYTES", 10 * 1024 * 1024):
+        siconfi_migracao.gravar_linha(_linha_grande())  # 1ª tentativa: passou inteira
+    siconfi_migracao.gravar_linha(_linha_grande())  # rerun, com o limite de verdade
+
+    contagem = paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 1)])
+    assert (contagem.completas, contagem.ambiguas) == (1, 0)
+    assert avaliar_tabela(1, 1, 1, contagem.completas, contagem.ambiguas)["situacao"] == (
+        "completo"
+    )
+
+
+def test_pagina_em_duas_formas_torna_a_tabela_inconsistente() -> None:
+    assert avaliar_tabela(1, 1, 1, 1, paginas_ambiguas=1)["situacao"] == "inconsistente"
+    # Durante a cópia, pode ser só o lote em andamento.
+    assert avaliar_tabela(2, 2, 1, 1, paginas_ambiguas=1)["situacao"] == "em_andamento"
 
 
 def test_pagina_com_parte_faltando_nao_conta(bucket: _BucketFalso) -> None:
     keys = siconfi_migracao.gravar_linha(_linha_grande())
     del bucket.objetos[keys[1]]
 
-    assert paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 1)]) == 0
+    assert paginas_dos_runs("rreo", [(_RUN, _COLETA_BRT, 1)]).completas == 0
     assert avaliar_tabela(1, 1, 1, 0)["situacao"] == "inconsistente"
 
 

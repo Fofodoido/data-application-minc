@@ -46,9 +46,10 @@ from siconfi_controle import FINAL_STATUSES, SiconfiControle, params_json
 from siconfi_storage import (
     FONTE,
     VALID_ENDPOINTS,
+    ContagemDePaginas,
+    contar_paginas,
     entidade,
     gravar_envelope,
-    paginas_completas,
 )
 
 ORIGEM_SCHEMA = "siconfi_bronze"
@@ -247,17 +248,23 @@ def avaliar_tabela(
     distintas_na_origem: int,
     copiadas: int,
     paginas_no_raw: int,
+    paginas_ambiguas: int = 0,
 ) -> dict[str, Any]:
     """Situação de uma tabela: ``completo``, ``em_andamento`` ou ``inconsistente``.
 
     ``inconsistente`` é a cópia dada como terminada sem as páginas esperadas no
-    raw: página perdida ou com parte faltando, chave repetida que virou uma
-    página só, ou bucket errado.
+    raw: página perdida ou com parte faltando, página em duas formas (inteira e
+    dividida, ou dividida de dois jeitos), chave repetida que virou uma página
+    só, ou bucket errado. Durante a cópia, uma página em duas formas pode ser só
+    o lote em andamento (a conversão regrava o lote inteiro); com a cópia dada
+    como terminada, não.
     Parar pelo limite ou pelo prazo não é inconsistência: é ``em_andamento``.
     """
     if copiadas < paginas_na_origem:
         situacao = "em_andamento"
-    elif paginas_no_raw == distintas_na_origem == paginas_na_origem:
+    elif paginas_ambiguas == 0 and (
+        paginas_no_raw == distintas_na_origem == paginas_na_origem
+    ):
         situacao = "completo"
     else:
         situacao = "inconsistente"
@@ -265,20 +272,23 @@ def avaliar_tabela(
         "paginas_na_origem": paginas_na_origem,
         "paginas_copiadas": copiadas,
         "paginas_no_raw": paginas_no_raw,
+        "paginas_ambiguas": paginas_ambiguas,
         "faltam": paginas_na_origem - copiadas,
         "situacao": situacao,
     }
 
 
-def paginas_dos_runs(endpoint: str, runs: list[tuple[str, datetime, int]]) -> int:
-    """Quantas páginas inteiras há no raw nas pastas dos runs antigos de ``endpoint``.
+def paginas_dos_runs(
+    endpoint: str, runs: list[tuple[str, datetime, int]]
+) -> ContagemDePaginas:
+    """As páginas no raw nas pastas dos runs antigos de ``endpoint``.
 
-    Conta páginas, não arquivos: uma página dividida em partes conta uma vez, e
-    só se todas as partes estão lá (``siconfi_storage.paginas_completas``). A DAG
-    nova nunca grava numa pasta de run antigo, então o que estiver nessas pastas
-    veio da conversão.
+    Conta páginas, não arquivos (``siconfi_storage.contar_paginas``): uma página
+    dividida conta uma vez, só com todas as partes, e a que aparece em duas formas
+    sai à parte, como ambígua. A DAG nova nunca grava numa pasta de run antigo,
+    então o que estiver nessas pastas veio da conversão.
     """
-    total = 0
+    total = ContagemDePaginas()
     for run_id, min_fetched_at, _ in runs:
         prefixo = datalakehouse.prefixo_do_run(
             datalakehouse.CAMADA_RAW,
@@ -287,7 +297,7 @@ def paginas_dos_runs(endpoint: str, runs: list[tuple[str, datetime, int]]) -> in
             run_id,
             data_do_run(run_id, min_fetched_at),
         )
-        total += paginas_completas(
+        total += contar_paginas(
             o["Key"]
             for o in datalakehouse.listar_objetos(prefixo)
             if o["Key"].endswith(".json")

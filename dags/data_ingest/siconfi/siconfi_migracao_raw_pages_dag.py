@@ -138,11 +138,13 @@ def _conferir() -> dict[str, Any]:
                 continue
             total, _ = total_na_origem(conn, endpoint)
             runs = runs_na_origem(conn, endpoint)
+            no_raw = paginas_dos_runs(endpoint, runs)
             relatorio[tabela] = avaliar_tabela(
                 paginas_na_origem=total,
                 distintas_na_origem=sum(n for _, _, n in runs),
                 copiadas=progresso.ler(tabela)[1],
-                paginas_no_raw=paginas_dos_runs(endpoint, runs),
+                paginas_no_raw=no_raw.completas,
+                paginas_ambiguas=no_raw.ambiguas,
             )
         if fila_existe(conn):
             amostra = amostra_da_fila_antiga(conn)
@@ -163,8 +165,9 @@ def _conferir() -> dict[str, Any]:
     ]
     if inconsistentes:
         raise AirflowFailException(
-            f"conversão inconsistente (arquivo faltando no raw, unidade faltando "
-            f"no controle ou chave antiga diferente do request_hash): "
+            f"conversão inconsistente (página faltando no raw ou em duas formas, "
+            f"unidade faltando no controle ou chave antiga diferente do "
+            f"request_hash): "
             f"{inconsistentes}"
         )
     return relatorio

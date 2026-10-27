@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Mapping, Protocol
 
@@ -104,16 +105,18 @@ def _corpo(valor: Any) -> bytes:
 
 def partes_do_envelope(
     envelope: Mapping[str, Any], limite: int | None = None
-) -> list[dict[str, Any]]:
-    """O envelope, ou as partes dele quando ele passa de ``limite`` bytes.
+) -> list[tuple[dict[str, Any], bytes]]:
+    """O envelope, ou as partes dele quando ele passa de ``limite`` bytes, cada um
+    com o JSON que vai para o arquivo.
 
     Divide só os ``items`` do ``payload``, na ordem; o resto do envelope se repete
     em cada parte. Página que cabe volta como está, sem ``_parte``, e mantém o nome
     de arquivo de sempre. Sem ``limite``, vale ``datalakehouse.LIMITE_OBJETO_BYTES``.
     """
     limite = datalakehouse.LIMITE_OBJETO_BYTES if limite is None else limite
-    if len(_corpo(envelope)) <= limite:
-        return [dict(envelope)]
+    corpo = _corpo(envelope)
+    if len(corpo) <= limite:
+        return [(dict(envelope), corpo)]
     payload = envelope.get("payload")
     if not isinstance(payload, Mapping) or not isinstance(payload.get("items"), list):
         raise ValueError(
@@ -135,11 +138,16 @@ def partes_do_envelope(
             }
         )
     )
+    if fixo >= limite:
+        raise ValueError(
+            f"página de {envelope['endpoint']}: o envelope sem os itens já tem "
+            f"{fixo} bytes, acima do limite de {limite} bytes por arquivo"
+        )
     # Cada item ocupa o próprio JSON mais o separador ", " da lista.
     grupos = datalakehouse.fatiar_por_tamanho(
         items, lambda item: len(_corpo(item)) + 2, limite - fixo
     )
-    return [
+    partes = [
         {
             **envelope,
             "payload": {**payload, "items": grupo},
@@ -147,6 +155,7 @@ def partes_do_envelope(
         }
         for indice, grupo in enumerate(grupos, start=1)
     ]
+    return [(parte, _corpo(parte)) for parte in partes]
 
 
 def gravar_envelope(envelope: Mapping[str, Any], data: datetime) -> list[str]:
@@ -155,14 +164,22 @@ def gravar_envelope(envelope: Mapping[str, Any], data: datetime) -> list[str]:
     É a única porta de escrita: a DAG de ingestão e a conversão das páginas
     antigas passam por aqui, então as duas produzem o mesmo caminho e formato.
     """
+    partes = partes_do_envelope(envelope)
     keys = []
-    for parte in partes_do_envelope(envelope):
+    for parte, corpo in partes:
         posicao = parte.get("_parte")
         key_raw = key_raw_do_envelope(
             parte, data, (posicao["indice"], posicao["total"]) if posicao else None
         )
-        datalakehouse.gravar_bytes(_corpo(parte), key_raw)
+        datalakehouse.gravar_bytes(corpo, key_raw)
         keys.append(key_raw)
+    if len(partes) > 1:
+        # A mesma página pode já estar no raw num arquivo só: a conversão regrava
+        # o lote que falhou, e uma página entre 900 KiB e o limite real do proxy
+        # pode ter passado inteira antes. Sem apagar, os itens ficariam duas vezes
+        # no mesmo run. Só depois de gravar todas as partes: se a task cair antes,
+        # a página continua inteira no arquivo antigo.
+        datalakehouse.apagar_objeto(key_raw_do_envelope(envelope, data))
     return keys
 
 
@@ -200,15 +217,29 @@ def raw_keys(endpoint: str, prefixo: str | None = None) -> list[str]:
     )
 
 
-def paginas_completas(keys: Iterable[str]) -> int:
-    """Quantas páginas distintas há em ``keys``, contando só as que estão inteiras.
+@dataclass(frozen=True)
+class ContagemDePaginas:
+    """Páginas distintas num conjunto de keys do raw.
 
-    Uma página dividida conta uma vez, e só se todas as partes estão lá: com uma
-    parte faltando, faltam itens dela no raw.
+    ``completas``: numa forma só e com todos os itens -- um arquivo, ou todas as
+    partes de uma divisão. ``ambiguas``: a mesma página inteira e dividida, ou
+    dividida de dois jeitos (``total`` diferente); os itens dela apareceriam duas
+    vezes, então ela não entra em ``completas``.
     """
-    # base -> total de partes -> índices vistos. Regravar a página com outro
-    # tamanho pode deixar partes de duas divisões; vale a que estiver inteira.
-    partes: dict[str, dict[int, set[int]]] = {}
+
+    completas: int = 0
+    ambiguas: int = 0
+
+    def __add__(self, outra: ContagemDePaginas) -> ContagemDePaginas:
+        return ContagemDePaginas(
+            self.completas + outra.completas, self.ambiguas + outra.ambiguas
+        )
+
+
+def contar_paginas(keys: Iterable[str]) -> ContagemDePaginas:
+    """Conta as páginas em ``keys``: uma página dividida conta uma vez, e só com
+    todas as partes; com uma parte faltando, faltam itens dela no raw."""
+    partes: dict[str, dict[int, set[int]]] = {}  # base -> total -> índices vistos
     inteiras: set[str] = set()
     for key in keys:
         nome = key.removesuffix(".json")
@@ -218,12 +249,17 @@ def paginas_completas(keys: Iterable[str]) -> int:
             continue
         base, indice, total = achado
         partes.setdefault(base, {}).setdefault(total, set()).add(indice)
+    ambiguas = {base for base, por_total in partes.items() if len(por_total) > 1}
+    ambiguas |= inteiras & set(partes)
     divididas = {
         base
         for base, por_total in partes.items()
-        if any(vistas == set(range(1, total + 1)) for total, vistas in por_total.items())
+        for total, vistas in por_total.items()
+        if vistas == set(range(1, total + 1))
     }
-    return len(inteiras | divididas)
+    return ContagemDePaginas(
+        completas=len((inteiras | divididas) - ambiguas), ambiguas=len(ambiguas)
+    )
 
 
 def itens_do_raw(key: str) -> list[dict[str, Any]]:

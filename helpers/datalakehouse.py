@@ -61,7 +61,7 @@ _CARACTERE_INSEGURO = re.compile(r"[^A-Za-z0-9._=-]")
 # pode passar disso divide o conteúdo em partes abaixo deste valor, com folga
 # para o cabeçalho da requisição. O upload em partes do S3 (multipart) não
 # resolve: cada parte tem no mínimo 5 MB.
-LIMITE_OBJETO_BYTES = 900 * 1024
+LIMITE_OBJETO_BYTES = 900 * 1024  # 900 KiB
 _PARTE_NO_NOME = re.compile(r"^(?P<base>.+)_p(?P<indice>\d+)de(?P<total>\d+)$")
 
 _T = TypeVar("_T")
@@ -429,6 +429,11 @@ def listar_objetos(prefixo_busca: str) -> list[dict[str, Any]]:
 def ler_parquet(key: str) -> pd.DataFrame:
     corpo = get_hook().get_key(key=key, bucket_name=BUCKET).get()["Body"].read()
     return pd.read_parquet(io.BytesIO(corpo))
+
+
+def apagar_objeto(key: str) -> None:
+    """Apaga ``key`` do bucket. Não falha se ela não existe: o S3 responde igual."""
+    get_hook().get_conn().delete_object(Bucket=BUCKET, Key=key)
 
 
 def gravar_bytes(conteudo: bytes, key: str) -> str:

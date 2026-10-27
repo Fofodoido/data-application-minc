@@ -40,7 +40,8 @@ from siconfi_storage import (
     envelope_da_pagina,
     ingerir_endpoint,
     itens_do_raw,
-    paginas_completas,
+    ContagemDePaginas,
+    contar_paginas,
     partes_do_envelope,
     persist_page,
     plan_from_extrato,
@@ -109,6 +110,9 @@ class _BucketFalso:
     def listar_objetos(self, prefixo: str) -> list[dict[str, Any]]:
         return [{"Key": key} for key in self.objetos if key.startswith(prefixo)]
 
+    def apagar_objeto(self, key: str) -> None:
+        self.objetos.pop(key, None)
+
 
 @pytest.fixture
 def bucket() -> Any:
@@ -118,6 +122,7 @@ def bucket() -> Any:
         patch.object(lake, "gravar_bytes", falso.gravar_bytes),
         patch.object(lake, "ler_json", falso.ler_json),
         patch.object(lake, "listar_objetos", falso.listar_objetos),
+        patch.object(lake, "apagar_objeto", falso.apagar_objeto),
     ):
         yield falso
 
@@ -450,16 +455,21 @@ def _envelope(n_itens: int) -> dict[str, Any]:
 
 def test_pagina_que_cabe_nao_muda() -> None:
     envelope = _envelope(3)
-    assert partes_do_envelope(envelope, _LIMITE) == [envelope]
+    ((parte, corpo),) = partes_do_envelope(envelope, _LIMITE)
+    assert parte == envelope and json.loads(corpo) == json.loads(
+        json.dumps(envelope, default=str)
+    )
 
 
 def test_pagina_grande_vira_partes_com_os_itens_na_ordem() -> None:
     envelope = _envelope(40)
-    partes = partes_do_envelope(envelope, _LIMITE)
+    com_corpo = partes_do_envelope(envelope, _LIMITE)
+    partes = [parte for parte, _ in com_corpo]
 
     assert len(partes) > 1
-    for parte in partes:
-        corpo = json.dumps(parte, ensure_ascii=False, default=str).encode("utf-8")
+    for parte, corpo in com_corpo:
+        # O corpo devolvido é o JSON da própria parte, o que vai para o arquivo.
+        assert json.loads(corpo) == json.loads(json.dumps(parte, default=str))
         assert len(corpo) <= _LIMITE
         # O resto do envelope se repete; só os itens são fatiados.
         assert {k: v for k, v in parte.items() if k not in ("payload", "_parte")} == {
@@ -496,12 +506,41 @@ def test_gravar_pagina_grande_grava_cada_parte(bucket: Any) -> None:
     assert lidos == envelope["payload"]["items"]
 
 
-def test_paginas_completas_conta_pagina_e_nao_arquivo() -> None:
+def test_envelope_sem_itens_acima_do_limite_diz_isso() -> None:
+    envelope = {**_envelope(3), "response_headers": {"x": "y" * _LIMITE}}
+    with pytest.raises(ValueError, match="o envelope sem os itens já tem"):
+        partes_do_envelope(envelope, _LIMITE)
+
+
+def test_dividir_apaga_a_mesma_pagina_gravada_inteira(bucket: Any) -> None:
+    """A conversão regrava o lote que falhou: uma página que passou inteira antes
+    (entre 900 KiB e o limite real) não pode ficar também em partes."""
+    envelope = _envelope(40)
+    (inteira,) = siconfi_storage.gravar_envelope(envelope, _DATA)
+    with patch.object(siconfi_storage.datalakehouse, "LIMITE_OBJETO_BYTES", _LIMITE):
+        partes = siconfi_storage.gravar_envelope(envelope, _DATA)
+
+    assert inteira not in bucket.objetos
+    assert set(bucket.objetos) == set(partes)
+    assert contar_paginas(bucket.objetos) == ContagemDePaginas(completas=1, ambiguas=0)
+    lidos = [item for key in raw_keys("rreo") for item in itens_do_raw(key)]
+    assert lidos == envelope["payload"]["items"]
+
+
+def test_contagem_e_por_pagina_e_acusa_pagina_em_duas_formas() -> None:
     keys = [
         "raw/x/a_0.json",
         "raw/x/b_0_p01de02.json",
         "raw/x/b_0_p02de02.json",
-        "raw/x/c_0_p01de03.json",  # faltam duas partes
+        "raw/x/c_0_p01de03.json",  # faltam duas partes: incompleta
         "raw/x/c_0_p03de03.json",
+        "raw/x/d_0.json",  # inteira e dividida
+        "raw/x/d_0_p01de02.json",
+        "raw/x/d_0_p02de02.json",
+        "raw/x/e_0_p01de02.json",  # dividida de dois jeitos
+        "raw/x/e_0_p02de02.json",
+        "raw/x/e_0_p01de03.json",
+        "raw/x/e_0_p02de03.json",
+        "raw/x/e_0_p03de03.json",
     ]
-    assert paginas_completas(keys) == 2
+    assert contar_paginas(keys) == ContagemDePaginas(completas=2, ambiguas=2)
