@@ -24,6 +24,7 @@ pytest.importorskip("airflow.sdk", reason="DAGs do Airflow 3: rodam dentro da im
 
 from airflow.dag_processing.dagbag import DagBag  # noqa: E402
 from airflow.sdk import TriggerRule  # noqa: E402
+from siconfi_storage import ContagemDePaginas  # noqa: E402
 from airflow.sdk.exceptions import (  # noqa: E402
     AirflowFailException,
     AirflowSkipException,
@@ -152,7 +153,7 @@ def test_conferir_falha_quando_falta_arquivo_no_raw() -> None:
         patch.object(dag, "tabela_existe", return_value=True),
         patch.object(dag, "total_na_origem", return_value=(10, 10)),
         patch.object(dag, "runs_na_origem", return_value=[("run", instante, 10)]),
-        patch.object(dag, "objetos_dos_runs", return_value=9),
+        patch.object(dag, "paginas_dos_runs", return_value=ContagemDePaginas(9, 0)),
         patch.object(dag, "fila_existe", return_value=False),
     ):
         with pytest.raises(AirflowFailException, match="inconsistente"):
