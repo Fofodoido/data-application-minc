@@ -22,6 +22,12 @@ FOMENTO = "Cultura.Fomento Direto"
 INCENTIVO = "Cultura.Incentivo Fiscal"
 FEDERATIVO = "Cultura.Repasse Federativo"
 CADASTRO = "Cultura.Cadastro Cultural"
+# Indicador externo (deflator do SGS/Bacen, catalogo do SIDRA/IBGE): nao e
+# mecanismo de fomento. PROVISORIO: o subdominio Cultura.Indicadores ainda NAO
+# existe no OpenMetadata. Esta aqui para o anotador nao reescrever bacen e
+# ibge_sidra para Fomento Direto; o nome definitivo sai quando o subdominio
+# for criado.
+INDICADORES = "Cultura.Indicadores"
 
 # Subdominio por schema de origem. O mecanismo de fomento e o criterio --
 # ver dbt/README.md.
@@ -41,9 +47,8 @@ DOMINIO_POR_SCHEMA = {
     # estrutura da captacao da Rouanet -- incentivo fiscal, nao repasse.
     "ancine": INCENTIVO,
     "dados_mapa_cultura": CADASTRO,
-    # `bacen` fica fora de proposito: serie do SGS e indicador externo
-    # (deflator), nao mecanismo de fomento. Mapear exige um subdominio
-    # novo, que precisa existir no OpenMetadata antes.
+    "bacen": INDICADORES,
+    "ibge_sidra": INDICADORES,
 }
 
 # Tier pela camada: quem pode depender daquilo.
@@ -70,6 +75,8 @@ DOMINIO_POR_PASTA = {
     # mapas_dbt lê o Mapa da Cultura, que é cadastro (schema
     # dados_mapa_cultura), não mecanismo de fomento
     "mapas": CADASTRO,
+    "bacen": INDICADORES,
+    "ibge_sidra": INDICADORES,
     "intermediate": FOMENTO,
     "cultura_em_numeros": FOMENTO,
 }

@@ -60,42 +60,59 @@
       "linhas_sql": 144
     },
     {
-      "nome": "serie_sgs",
-      "dominio": "bacen_bronze",
-      "camada": "outros",
+      "nome": "bronze_serie_sgs",
+      "dominio": "bacen",
+      "camada": "bronze",
       "meta": null,
-      "caminho": "dbt/minc/models/bacen_bronze/serie_sgs.sql",
-      "descricao": "Camada bronze tipada de bacen.serie_sgs. 5 colunas, 2 com cast aplicado.",
-      "colunas": [
-        {
-          "nome": "data",
-          "descricao": "Tipagem: 100% dos 427 valores casam com data."
-        },
-        {
-          "nome": "serie",
-          "descricao": "Tipagem: coluna constante."
-        },
-        {
-          "nome": "valor",
-          "descricao": "Tipagem: 100% dos 427 valores casam com decimal."
-        },
-        {
-          "nome": "dt_ingest",
-          "descricao": "Tipagem: coluna constante."
-        },
-        {
-          "nome": "codigo_serie",
-          "descricao": "Tipagem: coluna constante."
-        }
-      ],
-      "colunas_descritas": 5,
+      "caminho": "dbt/minc/models/bacen/bronze_serie_sgs.sql",
+      "descricao": "Camada Bronze — cópia fiel de bacen.serie_sgs, sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como na origem.",
+      "colunas": [],
+      "colunas_descritas": 0,
       "testes": 0,
       "materializacao": "",
       "depende_de": [],
       "sources": [
         "bacen.serie_sgs"
       ],
-      "linhas_sql": 14
+      "linhas_sql": 5
+    },
+    {
+      "nome": "silver_serie_sgs",
+      "dominio": "bacen",
+      "camada": "silver",
+      "meta": null,
+      "caminho": "dbt/minc/models/bacen/silver_serie_sgs.sql",
+      "descricao": "Séries temporais do SGS (Sistema Gerenciador de Séries Temporais) do Banco Central, tipadas. Uma linha por série e data de referência (`codigo_serie` + `data`). Todas as séries configuradas na Variable `bacen_series_sgs` caem nesta mesma tabela; sem a Variable, a bacen_sgs_ingest_dag traz só o IPCA-Serviços (SGS 10844). Serve de deflator: os valores de repasse e de pagamento das políticas são nominais e se espalham por vários anos. Lida de bronze_serie_sgs.",
+      "colunas": [
+        {
+          "nome": "data",
+          "descricao": "Data de referência do ponto da série. Na série mensal (IPCA-Serviços) é o primeiro dia do mês de referência. Valor fora do padrão aaaa-mm-dd vira nulo."
+        },
+        {
+          "nome": "serie",
+          "descricao": "Nome curto da série, como está na Variable `bacen_series_sgs` (`ipca_servicos`, por exemplo)."
+        },
+        {
+          "nome": "valor",
+          "descricao": "Valor do ponto, na unidade da série. Na 10844 (IPCA-Serviços) é a variação percentual no mês (0.42 = 0,42%), não o número-índice. Valor que não é decimal com ponto vira nulo."
+        },
+        {
+          "nome": "dt_ingest",
+          "descricao": "Momento da carga pela bacen_sgs_ingest_dag, em texto. A DAG recarrega as séries inteiras a cada execução."
+        },
+        {
+          "nome": "codigo_serie",
+          "descricao": "Código da série no SGS do Banco Central (10844 = IPCA-Serviços). Mantido como texto, como chega da fonte."
+        }
+      ],
+      "colunas_descritas": 5,
+      "testes": 1,
+      "materializacao": "",
+      "depende_de": [
+        "bronze_serie_sgs"
+      ],
+      "sources": [],
+      "linhas_sql": 15
     },
     {
       "nome": "bronze_controle_extracao_bbagil_extrato",
@@ -2359,194 +2376,279 @@
       "linhas_sql": 98
     },
     {
-      "nome": "agregados_catalogo",
-      "dominio": "ibge_sidra_bronze",
-      "camada": "outros",
+      "nome": "bronze_agregados_catalogo",
+      "dominio": "ibge_sidra",
+      "camada": "bronze",
       "meta": null,
-      "caminho": "dbt/minc/models/ibge_sidra_bronze/agregados_catalogo.sql",
-      "descricao": "Camada bronze tipada de ibge_sidra.agregados_catalogo. 4 colunas, 1 com cast aplicado.",
-      "colunas": [
-        {
-          "nome": "id",
-          "descricao": "Tipagem: 100% dos 9298 valores casam com inteiro."
-        },
-        {
-          "nome": "nome",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "pesquisa_id",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "pesquisa_nome",
-          "descricao": "Tipagem: valores heterogeneos."
-        }
-      ],
-      "colunas_descritas": 4,
+      "caminho": "dbt/minc/models/ibge_sidra/bronze_agregados_catalogo.sql",
+      "descricao": "Camada Bronze — cópia fiel de ibge_sidra.agregados_catalogo, sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como na origem.",
+      "colunas": [],
+      "colunas_descritas": 0,
       "testes": 0,
       "materializacao": "",
       "depende_de": [],
       "sources": [
         "ibge_sidra.agregados_catalogo"
       ],
-      "linhas_sql": 13
+      "linhas_sql": 6
     },
     {
-      "nome": "localidades",
-      "dominio": "ibge_sidra_bronze",
-      "camada": "outros",
+      "nome": "bronze_localidades",
+      "dominio": "ibge_sidra",
+      "camada": "bronze",
       "meta": null,
-      "caminho": "dbt/minc/models/ibge_sidra_bronze/localidades.sql",
-      "descricao": "Camada bronze tipada de ibge_sidra.localidades. 4 colunas, 2 com cast aplicado.",
-      "colunas": [
-        {
-          "nome": "agregado_id",
-          "descricao": "Tipagem: 100% dos 222862 valores casam com inteiro."
-        },
-        {
-          "nome": "nivel",
-          "descricao": "Tipagem: coluna constante."
-        },
-        {
-          "nome": "id",
-          "descricao": "Tipagem: 100% dos 222862 valores casam com inteiro."
-        },
-        {
-          "nome": "nome",
-          "descricao": "Tipagem: valores heterogeneos."
-        }
-      ],
-      "colunas_descritas": 4,
+      "caminho": "dbt/minc/models/ibge_sidra/bronze_localidades.sql",
+      "descricao": "Camada Bronze — cópia fiel de ibge_sidra.localidades, sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como na origem.",
+      "colunas": [],
+      "colunas_descritas": 0,
       "testes": 0,
       "materializacao": "",
       "depende_de": [],
       "sources": [
         "ibge_sidra.localidades"
       ],
-      "linhas_sql": 13
+      "linhas_sql": 6
     },
     {
-      "nome": "metadados",
-      "dominio": "ibge_sidra_bronze",
-      "camada": "outros",
+      "nome": "bronze_metadados",
+      "dominio": "ibge_sidra",
+      "camada": "bronze",
       "meta": null,
-      "caminho": "dbt/minc/models/ibge_sidra_bronze/metadados.sql",
-      "descricao": "Camada bronze tipada de ibge_sidra.metadados. 10 colunas, 2 com cast aplicado.",
-      "colunas": [
-        {
-          "nome": "agregado_id",
-          "descricao": "Tipagem: 100% dos 9293 valores casam com inteiro."
-        },
-        {
-          "nome": "id",
-          "descricao": "Tipagem: 100% dos 9293 valores casam com inteiro."
-        },
-        {
-          "nome": "nome",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "url",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "pesquisa",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "assunto",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "periodicidade",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "nivelterritorial",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "variaveis",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "classificacoes",
-          "descricao": "Tipagem: valores heterogeneos."
-        }
-      ],
-      "colunas_descritas": 10,
+      "caminho": "dbt/minc/models/ibge_sidra/bronze_metadados.sql",
+      "descricao": "Camada Bronze — cópia fiel de ibge_sidra.metadados, sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como na origem.",
+      "colunas": [],
+      "colunas_descritas": 0,
       "testes": 0,
       "materializacao": "",
       "depende_de": [],
       "sources": [
         "ibge_sidra.metadados"
       ],
-      "linhas_sql": 19
+      "linhas_sql": 6
     },
     {
-      "nome": "periodos",
-      "dominio": "ibge_sidra_bronze",
-      "camada": "outros",
+      "nome": "bronze_periodos",
+      "dominio": "ibge_sidra",
+      "camada": "bronze",
       "meta": null,
-      "caminho": "dbt/minc/models/ibge_sidra_bronze/periodos.sql",
-      "descricao": "Camada bronze tipada de ibge_sidra.periodos. 4 colunas, 2 com cast aplicado.",
-      "colunas": [
-        {
-          "nome": "agregado_id",
-          "descricao": "Tipagem: 100% dos 85170 valores casam com inteiro."
-        },
-        {
-          "nome": "id",
-          "descricao": "Tipagem: 100% dos 85170 valores casam com inteiro."
-        },
-        {
-          "nome": "literals",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "modificacao",
-          "descricao": "Tipagem: valores heterogeneos."
-        }
-      ],
-      "colunas_descritas": 4,
+      "caminho": "dbt/minc/models/ibge_sidra/bronze_periodos.sql",
+      "descricao": "Camada Bronze — cópia fiel de ibge_sidra.periodos, sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como na origem.",
+      "colunas": [],
+      "colunas_descritas": 0,
       "testes": 0,
       "materializacao": "",
       "depende_de": [],
       "sources": [
         "ibge_sidra.periodos"
       ],
-      "linhas_sql": 13
+      "linhas_sql": 5
     },
     {
-      "nome": "pesquisas",
-      "dominio": "ibge_sidra_bronze",
-      "camada": "outros",
+      "nome": "bronze_pesquisas",
+      "dominio": "ibge_sidra",
+      "camada": "bronze",
       "meta": null,
-      "caminho": "dbt/minc/models/ibge_sidra_bronze/pesquisas.sql",
-      "descricao": "Camada bronze tipada de ibge_sidra.pesquisas. 3 colunas, 0 com cast aplicado.",
-      "colunas": [
-        {
-          "nome": "id",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "nome",
-          "descricao": "Tipagem: valores heterogeneos."
-        },
-        {
-          "nome": "agregados",
-          "descricao": "Tipagem: valores heterogeneos."
-        }
-      ],
-      "colunas_descritas": 3,
+      "caminho": "dbt/minc/models/ibge_sidra/bronze_pesquisas.sql",
+      "descricao": "Camada Bronze — cópia fiel de ibge_sidra.pesquisas, sem cast, filtro nem join (ADR 0010). Todas as colunas chegam como na origem.",
+      "colunas": [],
+      "colunas_descritas": 0,
       "testes": 0,
       "materializacao": "",
       "depende_de": [],
       "sources": [
         "ibge_sidra.pesquisas"
       ],
-      "linhas_sql": 12
+      "linhas_sql": 6
+    },
+    {
+      "nome": "silver_agregados_catalogo",
+      "dominio": "ibge_sidra",
+      "camada": "silver",
+      "meta": null,
+      "caminho": "dbt/minc/models/ibge_sidra/silver_agregados_catalogo.sql",
+      "descricao": "Catálogo das tabelas (agregados) publicadas no SIDRA, o banco de tabelas do IBGE, tipado. Uma linha por agregado (`id`), com a pesquisa a que ele pertence. O teste `unique` confere esse grão, como aviso (`warn`) até a #100: a carga da ibge_agregados_dag acrescenta linhas em vez de substituir, e o homolog tem cerca de 9 cópias de cada linha. O grão é o esperado, não o garantido. Vem do GET /agregados da API de Agregados v3, achatado pela ibge_agregados_dag. Lida de bronze_agregados_catalogo.",
+      "colunas": [
+        {
+          "nome": "id",
+          "descricao": "Código do agregado (a \"tabela\" do SIDRA). Chave da tabela e o mesmo código usado em agregado_id nas outras tabelas do schema."
+        },
+        {
+          "nome": "nome",
+          "descricao": "Título do agregado, como o IBGE publica."
+        },
+        {
+          "nome": "pesquisa_id",
+          "descricao": "Código de duas letras da pesquisa do IBGE a que o agregado pertence. Liga com silver_pesquisas.id."
+        },
+        {
+          "nome": "pesquisa_nome",
+          "descricao": "Nome da pesquisa do IBGE a que o agregado pertence."
+        }
+      ],
+      "colunas_descritas": 4,
+      "testes": 1,
+      "materializacao": "",
+      "depende_de": [
+        "bronze_agregados_catalogo"
+      ],
+      "sources": [],
+      "linhas_sql": 14
+    },
+    {
+      "nome": "silver_localidades",
+      "dominio": "ibge_sidra",
+      "camada": "silver",
+      "meta": null,
+      "caminho": "dbt/minc/models/ibge_sidra/silver_localidades.sql",
+      "descricao": "Localidades em que cada agregado do SIDRA tem dado, tipadas. Uma linha por agregado e localidade (`agregado_id` + `id`). O teste `unique` confere esse grão, como aviso (`warn`) até a #100: a carga da ibge_agregados_dag acrescenta linhas em vez de substituir, e o homolog tem cerca de 9 cópias de cada linha. O grão é o esperado, não o garantido. Vem do GET /agregados/{id}/localidades/{nivel}; a ibge_agregados_dag só pede o nível N3 (Unidade da Federação), então `id` é sempre o código de UF do IBGE. Agregado sem recorte por UF não aparece. Lida de bronze_localidades.",
+      "colunas": [
+        {
+          "nome": "agregado_id",
+          "descricao": "Código do agregado do SIDRA. Liga com silver_agregados_catalogo.id."
+        },
+        {
+          "nome": "nivel",
+          "descricao": "Nível geográfico da localidade, em JSON como a API devolve (id e nome do nível). Hoje é sempre N3, Unidade da Federação."
+        },
+        {
+          "nome": "id",
+          "descricao": "Código IBGE da localidade. No nível N3, o código de dois dígitos da UF."
+        },
+        {
+          "nome": "nome",
+          "descricao": "Nome da localidade (no nível N3, o nome da UF)."
+        }
+      ],
+      "colunas_descritas": 4,
+      "testes": 1,
+      "materializacao": "",
+      "depende_de": [
+        "bronze_localidades"
+      ],
+      "sources": [],
+      "linhas_sql": 14
+    },
+    {
+      "nome": "silver_metadados",
+      "dominio": "ibge_sidra",
+      "camada": "silver",
+      "meta": null,
+      "caminho": "dbt/minc/models/ibge_sidra/silver_metadados.sql",
+      "descricao": "Metadados de cada agregado do SIDRA, tipados: pesquisa, assunto, periodicidade, níveis territoriais, variáveis e classificações. Uma linha por agregado. Vem do GET /agregados/{id}/metadados; os campos que a API devolve como lista ou objeto chegam como texto JSON. Lida de bronze_metadados.",
+      "colunas": [
+        {
+          "nome": "agregado_id",
+          "descricao": "Código do agregado pedido à API. Chave da tabela; liga com silver_agregados_catalogo.id."
+        },
+        {
+          "nome": "id",
+          "descricao": "Código do agregado como a API devolve no corpo da resposta. Igual a agregado_id."
+        },
+        {
+          "nome": "nome",
+          "descricao": "Título do agregado."
+        },
+        {
+          "nome": "url",
+          "descricao": "Endereço da tabela no site do SIDRA."
+        },
+        {
+          "nome": "pesquisa",
+          "descricao": "Nome da pesquisa do IBGE a que o agregado pertence."
+        },
+        {
+          "nome": "assunto",
+          "descricao": "Assunto do agregado, na classificação do IBGE."
+        },
+        {
+          "nome": "periodicidade",
+          "descricao": "Frequência da tabela e primeiro e último período publicados, em JSON."
+        },
+        {
+          "nome": "nivelterritorial",
+          "descricao": "Níveis geográficos em que o agregado tem dado (N1 Brasil, N3 UF, N6 município...), em JSON, separados em administrativos, especiais e do IBGE."
+        },
+        {
+          "nome": "variaveis",
+          "descricao": "Lista das variáveis medidas pelo agregado, com código, nome e unidade, em JSON."
+        },
+        {
+          "nome": "classificacoes",
+          "descricao": "Lista das classificações (recortes como sexo, idade, atividade) e das suas categorias, em JSON. Pode passar de 500 mil caracteres."
+        }
+      ],
+      "colunas_descritas": 10,
+      "testes": 1,
+      "materializacao": "",
+      "depende_de": [
+        "bronze_metadados"
+      ],
+      "sources": [],
+      "linhas_sql": 20
+    },
+    {
+      "nome": "silver_periodos",
+      "dominio": "ibge_sidra",
+      "camada": "silver",
+      "meta": null,
+      "caminho": "dbt/minc/models/ibge_sidra/silver_periodos.sql",
+      "descricao": "Períodos disponíveis em cada agregado do SIDRA, tipados. Uma linha por agregado e período (`agregado_id` + `id`). O teste `unique` confere esse grão, como aviso (`warn`) até a #100: a carga da ibge_agregados_dag acrescenta linhas em vez de substituir, e o homolog tem cerca de 9 cópias de cada linha. O grão é o esperado, não o garantido. Vem do GET /agregados/{id}/periodos. Lida de bronze_periodos.",
+      "colunas": [
+        {
+          "nome": "agregado_id",
+          "descricao": "Código do agregado do SIDRA. Liga com silver_agregados_catalogo.id."
+        },
+        {
+          "nome": "id",
+          "descricao": "Código do período no SIDRA: o ano (aaaa) ou o ano seguido do mês ou do trimestre (aaaamm), conforme a periodicidade do agregado."
+        },
+        {
+          "nome": "literals",
+          "descricao": "Rótulos do período, em JSON, como a API devolve."
+        },
+        {
+          "nome": "modificacao",
+          "descricao": "Data da última modificação do período no SIDRA. Mantida como texto, como chega da API."
+        }
+      ],
+      "colunas_descritas": 4,
+      "testes": 1,
+      "materializacao": "",
+      "depende_de": [
+        "bronze_periodos"
+      ],
+      "sources": [],
+      "linhas_sql": 14
+    },
+    {
+      "nome": "silver_pesquisas",
+      "dominio": "ibge_sidra",
+      "camada": "silver",
+      "meta": null,
+      "caminho": "dbt/minc/models/ibge_sidra/silver_pesquisas.sql",
+      "descricao": "Pesquisas do IBGE que têm tabelas no SIDRA. Uma linha por pesquisa (`id`). O teste `unique` confere esse grão, como aviso (`warn`) até a #100: a carga da ibge_agregados_dag acrescenta linhas em vez de substituir, e o homolog tem cerca de 9 cópias de cada linha. O grão é o esperado, não o garantido. Vem do GET /agregados. Lida de bronze_pesquisas; nenhuma coluna precisou de cast.",
+      "colunas": [
+        {
+          "nome": "id",
+          "descricao": "Código de duas letras da pesquisa. Chave da tabela; liga com silver_agregados_catalogo.pesquisa_id."
+        },
+        {
+          "nome": "nome",
+          "descricao": "Nome da pesquisa."
+        },
+        {
+          "nome": "agregados",
+          "descricao": "Lista dos agregados da pesquisa (código e nome), em JSON. É a mesma informação de silver_agregados_catalogo, sem achatar."
+        }
+      ],
+      "colunas_descritas": 3,
+      "testes": 1,
+      "materializacao": "",
+      "depende_de": [
+        "bronze_pesquisas"
+      ],
+      "sources": [],
+      "linhas_sql": 13
     },
     {
       "nome": "int_ancine_bbagil_salic",
@@ -43938,11 +44040,12 @@
         "silver": 1
       }
     },
-    "bacen_bronze": {
-      "modelos": 1,
-      "testes": 0,
+    "bacen": {
+      "modelos": 2,
+      "testes": 1,
       "camadas": {
-        "outros": 1
+        "bronze": 1,
+        "silver": 1
       }
     },
     "bbagil": {
@@ -43969,11 +44072,12 @@
         "gold": 6
       }
     },
-    "ibge_sidra_bronze": {
-      "modelos": 5,
-      "testes": 0,
+    "ibge_sidra": {
+      "modelos": 10,
+      "testes": 5,
       "camadas": {
-        "outros": 5
+        "bronze": 5,
+        "silver": 5
       }
     },
     "intermediate": {
@@ -44405,35 +44509,35 @@
     {
       "nome": "ibge_sidra",
       "schema": "ibge_sidra",
-      "descricao": "Agregados, localidades e metadados do SIDRA/IBGE, ingeridos pela DAG ibge_agregados_dag. Usados como referencia territorial e de indicador nos modelos de cotas e de perfil.",
+      "descricao": "Catálogo do SIDRA/IBGE (pesquisas, agregados, metadados, períodos e localidades), como a ibge_agregados_dag grava a partir da API de Agregados v3. Lido pelos modelos de models/ibge_sidra/.",
       "tabelas": [
         {
           "nome": "agregados_catalogo",
-          "descricao": "[NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 4 colunas."
+          "descricao": "Catálogo das tabelas (agregados) do SIDRA: uma linha por agregado, com a pesquisa do IBGE a que pertence. GET /agregados achatado. Tudo text."
         },
         {
           "nome": "localidades",
-          "descricao": "[NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 4 colunas."
+          "descricao": "Localidades em que cada agregado tem dado: uma linha por agregado e localidade. Só o nível N3 (UF), que é o que a DAG pede; `nivel` vem em JSON. GET /agregados/{id}/localidades/N3. Tudo text."
         },
         {
           "nome": "metadados",
-          "descricao": "[NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 10 colunas."
+          "descricao": "Metadados de cada agregado: uma linha por agregado, com pesquisa, assunto, periodicidade, níveis territoriais, variáveis e classificações (os quatro últimos em JSON). GET /agregados/{id}/metadados. Tudo text."
         },
         {
           "nome": "periodos",
-          "descricao": "[NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 4 colunas."
+          "descricao": "Períodos disponíveis em cada agregado: uma linha por agregado e período (ano ou ano com mês/trimestre). GET /agregados/{id}/periodos. Tudo text."
         },
         {
           "nome": "pesquisas",
-          "descricao": "[NÃO VERIFICADO] Tabela de ibge_sidra ainda sem descrição de negócio. 3 colunas."
+          "descricao": "Pesquisas do IBGE com tabelas no SIDRA: uma linha por pesquisa, com a lista dos seus agregados em JSON. GET /agregados. Tudo text."
         }
       ]
     }
   ],
   "totais": {
-    "modelos": 723,
-    "testes": 5177,
-    "com_descricao": 722,
+    "modelos": 729,
+    "testes": 5183,
+    "com_descricao": 728,
     "sources": 79
   }
 }

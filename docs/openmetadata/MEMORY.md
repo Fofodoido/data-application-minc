@@ -1591,7 +1591,7 @@ existentes e **8 faltando**.
 |---|---|---|---|
 | 1 | `dim_agente_perfil_rouanet_scd` | mestre de Agentes não ingerido; `agentes__vperfil` sem semântica verificada; origem provavelmente sem histórico | **fonte** |
 | 2 | `fct_pagamento_profissional_rouanet` | fonte existe (`sac__vwpagamentodefornecedordoprojetoporitemdetalhado`), grão não medido; falta A0 item 1 (`tipo_valor`) | **medição + regra** |
-| 3 | `dim_municipio_ibge` | não há base versionada de municípios nem de capitais; `ibge_sidra_bronze.localidades` é por agregado e a carga atual é nível UF | **fonte externa** |
+| 3 | `dim_municipio_ibge` | não há base versionada de municípios nem de capitais; `ibge_sidra.silver_localidades` é por agregado e a carga atual é nível UF | **fonte externa** |
 | 4 | `brg_projeto_local_execucao` | `sac__abrangencia` só tem `idprojeto`; depende da cobertura de `map_chave_projeto_rouanet`, que é o número não medido | **medição** |
 | 5 | `brg_territorio_classificacao` | não há critério homologado de vulnerabilidade para a Rouanet; o termo atual herda semântica de FCU, que é da LPG | **regra** |
 | 6 | `fct_execucao_municipal_rouanet` | depende de 2, 3 e 4, mais a regra de projeto multicidade (A0 item 5) | **cadeia** |

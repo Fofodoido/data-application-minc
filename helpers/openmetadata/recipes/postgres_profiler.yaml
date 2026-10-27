@@ -23,7 +23,6 @@ source:
           # do projeto dbt e falha quando as duas divergem.
           - '^ancine$'
           - '^bacen$'
-          - '^bacen_bronze$'
           - '^bb_agil$'
           - '^bbagil$'
           - '^bronze$'
@@ -35,7 +34,6 @@ source:
           - '^dados_salic$'
           - '^execucao_pnab$'
           - '^ibge_sidra$'
-          - '^ibge_sidra_bronze$'
           - '^intermediate$'
           - '^mapas$'
           - '^metadata$'

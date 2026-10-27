@@ -1,5 +1,6 @@
--- Bronze ibge_sidra — metadados.
--- Origem: ibge_sidra.metadados, onde tudo chega como text da ingestão via API.
+-- Silver ibge_sidra — metadados.
+-- Origem: bronze_metadados, cópia fiel de ibge_sidra.metadados, onde tudo chega como
+-- text da ingestão via API.
 -- Tipar é o trabalho desta camada.
 -- 10 colunas: 2 tipadas, 8 mantidas como texto.
 -- O cast vem do padrão medido no dado (scripts/perfilar_padroes.py),
@@ -15,4 +16,4 @@ select
     {{ bronze_texto("nivelterritorial") }} as nivelterritorial,
     {{ bronze_texto("variaveis") }} as variaveis,
     {{ bronze_texto("classificacoes") }} as classificacoes
-from {{ source("ibge_sidra", "metadados") }}
+from {{ ref("bronze_metadados") }}
