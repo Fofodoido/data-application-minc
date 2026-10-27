@@ -23,7 +23,10 @@ INCENTIVO = "Cultura.Incentivo Fiscal"
 FEDERATIVO = "Cultura.Repasse Federativo"
 CADASTRO = "Cultura.Cadastro Cultural"
 # Indicador externo (deflator do SGS/Bacen, catalogo do SIDRA/IBGE): nao e
-# mecanismo de fomento. O subdominio ainda precisa ser criado no OpenMetadata.
+# mecanismo de fomento. PROVISORIO: o subdominio Cultura.Indicadores ainda NAO
+# existe no OpenMetadata. Esta aqui para o anotador nao reescrever bacen e
+# ibge_sidra para Fomento Direto; o nome definitivo sai quando o subdominio
+# for criado.
 INDICADORES = "Cultura.Indicadores"
 
 # Subdominio por schema de origem. O mecanismo de fomento e o criterio --

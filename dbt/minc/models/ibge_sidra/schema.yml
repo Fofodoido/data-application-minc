@@ -77,23 +77,33 @@ models:
     description: >
       Catálogo das tabelas (agregados) publicadas no SIDRA, o banco de tabelas do
       IBGE, tipado. Uma linha por agregado (`id`), com a pesquisa a que ele
-      pertence. Vem do GET /agregados da API de Agregados v3, achatado pela
+      pertence. O teste `unique` confere esse grão, como aviso (`warn`) até a #100:
+      a carga da ibge_agregados_dag acrescenta linhas em vez de substituir, e o
+      homolog tem cerca de 9 cópias de cada linha. O grão é o esperado, não o
+      garantido. Vem do GET /agregados da API de Agregados v3, achatado pela
       ibge_agregados_dag. Lida de bronze_agregados_catalogo.
     config:
       tags:
         - silver
         - ibge_sidra
-    meta:
-      openmetadata:
-        domain: Cultura.Indicadores
-        tier: Tier.Tier2
-        owner: minc-data-engineering
+      meta:
+        status: Active
+        origem_dados: 'bronze_agregados_catalogo'
+        openmetadata:
+          domain: Cultura.Indicadores
+          tier: Tier.Tier2
+          owner: minc-data-engineering
     columns:
       - name: id
         description: >
           Código do agregado (a "tabela" do SIDRA). Chave da tabela e o mesmo
           código usado em agregado_id nas outras tabelas do schema.
         data_type: integer
+        tests:
+          # warn até a #100: a ibge_agregados_dag duplica linhas (cerca de 9 cópias no homolog)
+          - unique:
+              config:
+                severity: warn
       - name: nome
         description: >
           Título do agregado, como o IBGE publica.
@@ -115,19 +125,30 @@ models:
   - name: silver_localidades
     description: >
       Localidades em que cada agregado do SIDRA tem dado, tipadas. Uma linha por
-      agregado e localidade (`agregado_id` + `id`). Vem do GET
-      /agregados/{id}/localidades/{nivel}; a ibge_agregados_dag só pede o nível
-      N3 (Unidade da Federação), então `id` é sempre o código de UF do IBGE.
-      Agregado sem recorte por UF não aparece. Lida de bronze_localidades.
+      agregado e localidade (`agregado_id` + `id`). O teste `unique` confere esse
+      grão, como aviso (`warn`) até a #100: a carga da ibge_agregados_dag acrescenta
+      linhas em vez de substituir, e o homolog tem cerca de 9 cópias de cada linha.
+      O grão é o esperado, não o garantido. Vem do GET
+      /agregados/{id}/localidades/{nivel}; a ibge_agregados_dag só pede o nível N3
+      (Unidade da Federação), então `id` é sempre o código de UF do IBGE. Agregado
+      sem recorte por UF não aparece. Lida de bronze_localidades.
     config:
       tags:
         - silver
         - ibge_sidra
-    meta:
-      openmetadata:
-        domain: Cultura.Indicadores
-        tier: Tier.Tier2
-        owner: minc-data-engineering
+      meta:
+        status: Active
+        origem_dados: 'bronze_localidades'
+        openmetadata:
+          domain: Cultura.Indicadores
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+    tests:
+      # warn até a #100: a ibge_agregados_dag duplica linhas (cerca de 9 cópias no homolog)
+      - unique:
+          column_name: "agregado_id || '-' || id"
+          config:
+            severity: warn
     columns:
       - name: agregado_id
         description: >
@@ -162,17 +183,21 @@ models:
       tags:
         - silver
         - ibge_sidra
-    meta:
-      openmetadata:
-        domain: Cultura.Indicadores
-        tier: Tier.Tier2
-        owner: minc-data-engineering
+      meta:
+        status: Active
+        origem_dados: 'bronze_metadados'
+        openmetadata:
+          domain: Cultura.Indicadores
+          tier: Tier.Tier2
+          owner: minc-data-engineering
     columns:
       - name: agregado_id
         description: >
           Código do agregado pedido à API. Chave da tabela; liga com
           silver_agregados_catalogo.id.
         data_type: integer
+        tests:
+          - unique
       - name: id
         description: >
           Código do agregado como a API devolve no corpo da resposta. Igual a
@@ -222,17 +247,28 @@ models:
   - name: silver_periodos
     description: >
       Períodos disponíveis em cada agregado do SIDRA, tipados. Uma linha por
-      agregado e período (`agregado_id` + `id`). Vem do GET
-      /agregados/{id}/periodos. Lida de bronze_periodos.
+      agregado e período (`agregado_id` + `id`). O teste `unique` confere esse grão,
+      como aviso (`warn`) até a #100: a carga da ibge_agregados_dag acrescenta
+      linhas em vez de substituir, e o homolog tem cerca de 9 cópias de cada linha.
+      O grão é o esperado, não o garantido. Vem do GET /agregados/{id}/periodos.
+      Lida de bronze_periodos.
     config:
       tags:
         - silver
         - ibge_sidra
-    meta:
-      openmetadata:
-        domain: Cultura.Indicadores
-        tier: Tier.Tier2
-        owner: minc-data-engineering
+      meta:
+        status: Active
+        origem_dados: 'bronze_periodos'
+        openmetadata:
+          domain: Cultura.Indicadores
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+    tests:
+      # warn até a #100: a ibge_agregados_dag duplica linhas (cerca de 9 cópias no homolog)
+      - unique:
+          column_name: "agregado_id || '-' || id"
+          config:
+            severity: warn
     columns:
       - name: agregado_id
         description: >
@@ -255,24 +291,33 @@ models:
 
   - name: silver_pesquisas
     description: >
-      Pesquisas do IBGE que têm tabelas no SIDRA. Uma linha por pesquisa (`id`).
-      Vem do GET /agregados. Lida de bronze_pesquisas; nenhuma coluna precisou
-      de cast.
+      Pesquisas do IBGE que têm tabelas no SIDRA. Uma linha por pesquisa (`id`). O
+      teste `unique` confere esse grão, como aviso (`warn`) até a #100: a carga da
+      ibge_agregados_dag acrescenta linhas em vez de substituir, e o homolog tem
+      cerca de 9 cópias de cada linha. O grão é o esperado, não o garantido. Vem do
+      GET /agregados. Lida de bronze_pesquisas; nenhuma coluna precisou de cast.
     config:
       tags:
         - silver
         - ibge_sidra
-    meta:
-      openmetadata:
-        domain: Cultura.Indicadores
-        tier: Tier.Tier2
-        owner: minc-data-engineering
+      meta:
+        status: Active
+        origem_dados: 'bronze_pesquisas'
+        openmetadata:
+          domain: Cultura.Indicadores
+          tier: Tier.Tier2
+          owner: minc-data-engineering
     columns:
       - name: id
         description: >
           Código de duas letras da pesquisa. Chave da tabela; liga com
           silver_agregados_catalogo.pesquisa_id.
         data_type: text
+        tests:
+          # warn até a #100: a ibge_agregados_dag duplica linhas (cerca de 9 cópias no homolog)
+          - unique:
+              config:
+                severity: warn
       - name: nome
         description: >
           Nome da pesquisa.

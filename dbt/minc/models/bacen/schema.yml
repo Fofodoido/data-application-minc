@@ -30,11 +30,16 @@ models:
       tags:
         - silver
         - bacen
-    meta:
-      openmetadata:
-        domain: Cultura.Indicadores
-        tier: Tier.Tier2
-        owner: minc-data-engineering
+      meta:
+        status: Active
+        origem_dados: 'bronze_serie_sgs'
+        openmetadata:
+          domain: Cultura.Indicadores
+          tier: Tier.Tier2
+          owner: minc-data-engineering
+    tests:
+      - unique:
+          column_name: "codigo_serie || '|' || data"
     columns:
       - name: data
         description: >
